@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "GreenPoint Mumbai",
+    "slug": "greenpoint-mumbai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "greenpoint",
+    "userInterfaceStyle": "light",
+    "updates": {
+      "enabled": false
+    },
+
+    "ios": {
+      "supportsTablet": false
+    },
+
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#16a34a"
+      }
+    },
+
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Allow GreenPoint to access camera for QR scanning"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GreenPoint to access photos for appeal submission"
+        }
+      ]
+    ]
+  }
+}
