@@ -7,6 +7,8 @@ import WardOverview from './pages/WardOverview';
 import Violations from './pages/Violations';
 import Citizens from './pages/Citizens';
 import Campaigns from './pages/Campaigns';
+import Households from './pages/Households';
+import CollectorAudit from './pages/CollectorAudit';
 import { useAuthStore } from './store/authStore';
 
 const ProtectedRoute = ({ children }) => {
@@ -33,6 +35,8 @@ export default function App() {
           <Route path="/violations" element={<Violations />} />
           <Route path="/citizens" element={<Citizens />} />
           <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/households" element={<Households />} />
+          <Route path="/collector-audit" element={<CollectorAudit />} />
         </Route>
         
         <Route path="*" element={<Navigate to="/" replace />} />

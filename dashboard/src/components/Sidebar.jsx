@@ -10,7 +10,9 @@ export default function Sidebar() {
     { to: '/', label: 'Dashboard', icon: '🏠' },
     { to: '/violations', label: 'Violations', icon: '⚠️' },
     { to: '/citizens', label: 'Citizens', icon: '👥' },
-    { to: '/campaigns', label: 'Campaigns', icon: '📢' }
+    { to: '/campaigns', label: 'Campaigns', icon: '📢' },
+    { to: '/households', label: 'Households', icon: '🏠' },
+    { to: '/collector-audit', label: 'Collector Audit', icon: '🔍' }
   ];
 
   const getInitials = (name) => {

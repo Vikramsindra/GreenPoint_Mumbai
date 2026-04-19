@@ -47,6 +47,11 @@ const userSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  householdId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Household', 
+    default: null 
+  },
   pointsBalance: {
     type: Number,
     default: 0,

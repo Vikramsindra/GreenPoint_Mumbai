@@ -105,4 +105,28 @@ export const getWasteGuide = async () => {
   return res.data;
 };
 
+// Households
+export const getMyHousehold = () => api.get('/households/my');
+export const getWardHouseholds = () => api.get('/households/ward');
+export const downloadQRCode = (id) => api.get(`/households/qr-image/${id}`, { responseType: 'blob' });
+
+// Collector scan
+export const collectorScan = (qrCode, location, note = '') =>
+  api.post('/points/collector-scan', { qrCode, location, note });
+
+// Collector stats
+export const getCollectorStats = () => api.get('/points/collector-stats');
+
+// Leaderboard
+export const getLeaderboard = async (limit = 20) => {
+  const res = await api.get(`/points/leaderboard?limit=${limit}`);
+  return res.data;
+};
+
+// Badges
+export const getBadges = async () => {
+  const res = await api.get('/points/badges');
+  return res.data;
+};
+
 export default api;

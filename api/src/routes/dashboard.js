@@ -119,6 +119,24 @@ router.get('/citizens', auth, requireRole('officer'), async (req, res) => {
   }
 });
 
+router.get('/users', auth, requireRole('officer'), async (req, res) => {
+  try {
+    const { role, search } = req.query;
+    const filter = { wardId: req.user.wardId };
+    if (role) filter.role = role;
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+    const users = await User.find(filter).select('-passwordHash').sort({ name: 1 });
+    res.json({ success: true, data: users, message: 'Users fetched' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Fetch failed: ' + error.message });
+  }
+});
+
 router.get('/recent-violations', auth, requireRole('officer'), async (req, res) => {
   try {
     const violations = await Violation.find()

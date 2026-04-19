@@ -7,7 +7,7 @@ import { COLORS } from "../constants/theme";
 import SideMenu from "../components/SideMenu";
 
 export default function RootLayout() {
-  const { token, isLoading, loadStoredAuth } = useAuthStore();
+  const { token, user, isLoading, loadStoredAuth } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
@@ -40,7 +40,11 @@ export default function RootLayout() {
     if (!token && !inAuthGroup) {
       router.replace("/(auth)/login");
     } else if (token && inAuthGroup) {
-      router.replace("/(tabs)/home");
+      if (user?.role === 'collector') {
+        router.replace("/(collector)/round");
+      } else {
+        router.replace("/(tabs)/home");
+      }
     }
   }, [token, isReady, segments]);
 

@@ -10,16 +10,26 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Rect, Path } from 'react-native-svg';
 import { COLORS, SPACING, SHADOW, RADIUS, FONTS } from '../../constants/theme';
+import * as api from '../../services/api';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { balance, history, isLoading, refresh } = usePointsStore();
   const { openMenu } = useUiStore();
+  
+  const [collectorStats, setCollectorStats] = React.useState(null);
 
   useEffect(() => {
-    refresh();
-  }, []);
+    if (user?.role !== 'collector') {
+      refresh();
+    }
+    if (user?.role === 'collector') {
+      api.getCollectorStats()
+        .then(res => { if (res.data?.success) setCollectorStats(res.data.data); })
+        .catch(err => console.log('Failed to fetch collector stats', err));
+    }
+  }, [user]);
 
   const fillRatio = Math.min(balance / 500, 1);
   
@@ -43,6 +53,64 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
+      {user?.role === 'collector' ? (
+        <ScrollView 
+          contentContainerStyle={[styles.scrollContent, { padding: 20 }]}
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => {
+            refresh();
+            api.getCollectorStats().then(res => { if(res.success) setCollectorStats(res.data); }).catch(()=>{});
+          }} tintColor={COLORS.primary} />}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={{ fontSize: 28, fontWeight: 'bold', color: COLORS.text, marginBottom: 20 }}>
+            Collector Dashboard
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+            <View style={{ flex: 1, backgroundColor: '#f0fdf4', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#bbf7d0' }}>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#16a34a' }}>{collectorStats?.scansToday || 0}</Text>
+              <Text style={{ fontSize: 14, color: '#15803d' }}>Scans Today</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: '#fef2f2', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#fecaca' }}>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#dc2626' }}>{collectorStats?.violationsLoggedToday || 0}</Text>
+              <Text style={{ fontSize: 14, color: '#b91c1c' }}>Violations</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={{ backgroundColor: '#16a34a', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 12 }}
+            onPress={() => router.push('/(collector)/round')}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Go to Daily Round</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={{ backgroundColor: '#fff', borderWidth: 2, borderColor: '#16a34a', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 30 }}
+            onPress={() => router.push('/(collector)/scan')}
+          >
+            <Text style={{ color: '#16a34a', fontSize: 16, fontWeight: 'bold' }}>Scan QR Code</Text>
+          </TouchableOpacity>
+
+          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Recent Activity</Text>
+          {history && history.length > 0 ? (
+            history.slice(0, 5).map(event => (
+              <View key={event._id} style={styles.trackerCard}>
+                <View style={[styles.trackerIconBox, {backgroundColor: '#f0fdf4'}]}>
+                  <Ionicons name="scan" size={24} color="#16a34a" />
+                </View>
+                <View style={styles.trackerContent}>
+                  <Text style={styles.trackerTitle}>{event.description}</Text>
+                  <Text style={styles.trackerValue}>
+                    {new Date(event.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}
+                  </Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={{ color: '#6b7280' }}>No recent scans</Text>
+          )}
+        </ScrollView>
+      ) : (
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} tintColor={COLORS.primary} />}
@@ -194,6 +262,7 @@ export default function HomeScreen() {
 
         </View>
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

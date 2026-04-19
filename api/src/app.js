@@ -42,6 +42,9 @@ app.use('/api/violations', violationsRoutes);
 app.use('/api/awareness', awarenessRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
+const householdRoutes = require('./routes/households');
+app.use('/api/households', householdRoutes);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route not found: ${req.method} ${req.originalUrl}` });

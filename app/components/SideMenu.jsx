@@ -58,6 +58,13 @@ export default function SideMenu() {
                 <Text style={styles.menuText}>Profile</Text>
               </TouchableOpacity>
 
+              {user?.role === 'citizen' && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/leaderboard')}>
+                  <Ionicons name="trophy-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
+                  <Text style={styles.menuText}>Leaderboard</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/rewards-history')}>
                 <Ionicons name="gift-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
                 <Text style={styles.menuText}>Reward History</Text>

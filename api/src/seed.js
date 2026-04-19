@@ -7,7 +7,9 @@ const Campaign = require('./models/Campaign');
 const PointEvent = require('./models/PointEvent');
 const Violation = require('./models/Violation');
 const QuizResult = require('./models/QuizResult');
+const Household = require('./models/Household');
 const connectDB = require('./config/db');
+const { generateQRCodeString, generateQRCodeImage } = require('./utils/qrGenerator');
 
 const SEED = async () => {
   await connectDB();
@@ -18,6 +20,7 @@ const SEED = async () => {
     await Violation.deleteMany({});
     await PointEvent.deleteMany({});
     await Campaign.deleteMany({});
+    await Household.deleteMany({});
     await User.deleteMany({});
 
     console.log('Creating users...');
@@ -25,8 +28,8 @@ const SEED = async () => {
     const passwordHash = await bcrypt.hash('password123', salt);
 
     const officer = await User.create({ name: 'Rajesh Patil', phone: '9876543210', passwordHash, role: 'officer', wardId: 'N-WARD' });
-    const collector1 = await User.create({ name: 'Ramesh Yadav', phone: '9876543211', passwordHash, role: 'collector', wardId: 'N-WARD' });
-    const collector2 = await User.create({ name: 'Suresh Kamble', phone: '9876543212', passwordHash, role: 'collector', wardId: 'N-WARD' });
+    const collector1 = await User.create({ name: 'Ramesh Yadav', phone: '9876543211', passwordHash, role: 'collector', wardId: 'N-WARD', collectorId: 'COL1001' });
+    const collector2 = await User.create({ name: 'Suresh Kamble', phone: '9876543212', passwordHash, role: 'collector', wardId: 'N-WARD', collectorId: 'COL1002' });
 
     const citizenParams = [
       { name: 'Priya Sharma', phone: '9876543220', societyId: 'SUNRISE-APT' },
@@ -44,6 +47,43 @@ const SEED = async () => {
     const citizens = await User.insertMany(citizenParams.map(c => ({
       ...c, passwordHash, role: 'citizen', wardId: 'N-WARD', pointsBalance: 0, violationCount30d: 0
     })));
+
+    console.log('Creating households...');
+    const householdData = [
+      { citizenId: citizens[0]._id, address: 'Flat 4B, Sunrise Apartments, LBS Marg, Ghatkopar East', societyId: 'SUNRISE-APT' },
+      { citizenId: citizens[1]._id, address: 'Flat 12A, Sunrise Apartments, LBS Marg, Ghatkopar East', societyId: 'SUNRISE-APT' },
+      { citizenId: citizens[2]._id, address: 'Flat 7C, Green Valley CHS, Vikhroli West', societyId: 'GREEN-VALLEY' },
+      { citizenId: citizens[3]._id, address: 'Flat 2D, Green Valley CHS, Vikhroli West', societyId: 'GREEN-VALLEY' },
+      { citizenId: citizens[4]._id, address: 'Flat 9A, Sunrise Apartments, LBS Marg, Ghatkopar East', societyId: 'SUNRISE-APT' },
+      { citizenId: citizens[5]._id, address: 'Flat 3B, Shivaji Nagar Chawl, Govandi', societyId: 'SHIVAJI-NAGAR' },
+      { citizenId: citizens[6]._id, address: 'Flat 6C, Shivaji Nagar Chawl, Govandi', societyId: 'SHIVAJI-NAGAR' },
+      { citizenId: citizens[7]._id, address: 'Flat 15A, Green Valley CHS, Vikhroli West', societyId: 'GREEN-VALLEY' },
+      { citizenId: citizens[8]._id, address: 'Flat 1A, Sunrise Apartments, LBS Marg, Ghatkopar East', societyId: 'SUNRISE-APT' },
+      { citizenId: citizens[9]._id, address: 'Flat 8D, Shivaji Nagar Chawl, Govandi', societyId: 'SHIVAJI-NAGAR' },
+    ];
+
+    const households = [];
+    for (const hData of householdData) {
+      const qrCode = generateQRCodeString();
+      const qrImageUrl = await generateQRCodeImage(qrCode);
+      const household = await Household.create({
+        ...hData,
+        wardId: 'N-WARD',
+        qrCode,
+        qrImageUrl,
+        isActive: true,
+        totalScans: Math.floor(Math.random() * 20),
+      });
+      households.push(household);
+      // Link household back to citizen
+      await User.findByIdAndUpdate(hData.citizenId, { householdId: household._id });
+    }
+
+    console.log(`✅ Created ${households.length} households with QR codes`);
+    // Log QR codes for testing
+    households.forEach((h, i) => {
+      console.log(`   Household ${i+1}: ${h.qrCode} — ${h.address.split(',')[0]}`);
+    });
 
     console.log('Creating campaigns...');
     const now = new Date();
@@ -133,9 +173,11 @@ const SEED = async () => {
     const totalPointEvents = await PointEvent.countDocuments();
     const totalViolations = await Violation.countDocuments();
     const totalQuizResults = await QuizResult.countDocuments();
+    const totalHouseholds = await Household.countDocuments();
 
     console.log(`\n✅ Seed completed successfully!`);
     console.log(`- Users: ${totalUsers}`);
+    console.log(`- Households: ${totalHouseholds}`);
     console.log(`- Campaigns: ${totalCampaigns}`);
     console.log(`- PointEvents: ${totalPointEvents}`);
     console.log(`- Violations: ${totalViolations}`);
