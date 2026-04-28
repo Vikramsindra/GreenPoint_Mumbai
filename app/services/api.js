@@ -3,7 +3,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Note: Use your local IP for physical device testing
-const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://10.21.179.81:5000/api';
+const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.29.174:5000/api';
 
 const api = axios.create({
   baseURL,
@@ -127,6 +127,33 @@ export const getLeaderboard = async (limit = 20) => {
 export const getBadges = async () => {
   const res = await api.get('/points/badges');
   return res.data;
+};
+
+// BMC Collections (for BMC Collector role)
+export const logBMCCollection = async (data) => {
+  const res = await api.post('/bmc-collections', data);
+  return res;
+};
+
+export const getBMCCollections = async (options = {}) => {
+  const { filter = 'all' } = options;
+  const res = await api.get(`/bmc-collections?filter=${filter}`);
+  return res;
+};
+
+export const getAssignedCollectionPoints = async () => {
+  const res = await api.get('/bmc-collections/points/assigned');
+  return res;
+};
+
+export const getBMCCollectionHistory = async (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.startDate) params.append('startDate', filters.startDate);
+  if (filters.endDate) params.append('endDate', filters.endDate);
+  if (filters.wasteType) params.append('wasteType', filters.wasteType);
+  
+  const res = await api.get(`/bmc-collections/history?${params.toString()}`);
+  return res;
 };
 
 export default api;

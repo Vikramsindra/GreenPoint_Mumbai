@@ -51,8 +51,8 @@ export default function RegisterScreen() {
     if (form.password !== form.confirm)
       newErrors.confirm = "Passwords do not match";
 
-    // Collector-specific validation
-    if (form.role === "collector") {
+    // Collector and BMC Collector-specific validation
+    if (form.role === "collector" || form.role === "bmc_collector") {
       if (form.collectorId.length < 3)
         newErrors.collectorId = "Collector ID must be at least 3 characters";
       if (!form.wardId) newErrors.wardId = "Ward selection is required";
@@ -76,8 +76,8 @@ export default function RegisterScreen() {
         role: form.role,
       };
 
-      // Include collector-specific fields if role is collector
-      if (form.role === "collector") {
+      // Include collector-specific fields if role is collector or bmc_collector
+      if (form.role === "collector" || form.role === "bmc_collector") {
         registerData.collectorId = form.collectorId;
         registerData.wardId = form.wardId;
       }
@@ -97,6 +97,8 @@ export default function RegisterScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>
           {form.role === "collector"
+            ? "Society Collector Portal"
+            : form.role === "bmc_collector"
             ? "BMC Collector Portal"
             : "Create Account"}
         </Text>
@@ -110,8 +112,8 @@ export default function RegisterScreen() {
           {/* Role Selection - First Step */}
           <View style={styles.field}>
             <Text style={styles.label}>Select Role</Text>
-            <View style={styles.roleRow}>
-              {["citizen", "collector"].map((r) => (
+            <View style={styles.roleGrid}>
+              {["citizen", "collector", "bmc_collector"].map((r) => (
                 <TouchableOpacity
                   key={r}
                   style={[
@@ -121,7 +123,7 @@ export default function RegisterScreen() {
                   onPress={() => handleRoleChange(r)}
                 >
                   <Text style={styles.roleIcon}>
-                    {r === "citizen" ? "👤" : "🏛️"}
+                    {r === "citizen" ? "👤" : r === "collector" ? "🏛️" : "🚛"}
                   </Text>
                   <Text
                     style={[
@@ -129,7 +131,11 @@ export default function RegisterScreen() {
                       form.role === r && styles.roleTxtActive,
                     ]}
                   >
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                    {r === "citizen"
+                      ? "Citizen"
+                      : r === "collector"
+                      ? "Collector"
+                      : "BMC Collector"}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -171,10 +177,26 @@ export default function RegisterScreen() {
           </View>
 
           {/* Collector-specific fields */}
-          {form.role === "collector" && (
+          {(form.role === "collector" || form.role === "bmc_collector") && (
             <>
+              <View style={styles.roleDescription}>
+                <Text style={styles.roleDescLabel}>
+                  {form.role === "collector"
+                    ? "Society Waste Collector"
+                    : "Bulk/BMC Waste Collector"}
+                </Text>
+                <Text style={styles.roleDescText}>
+                  {form.role === "collector"
+                    ? "Collects segregated waste from households in your assigned society"
+                    : "Collects bulk waste from collection points, public bins, and transfer stations"}
+                </Text>
+              </View>
+
               <View style={styles.field}>
-                <Text style={styles.label}>Official BMC Collector ID *</Text>
+                <Text style={styles.label}>
+                  Official {form.role === "collector" ? "Society" : "BMC"} Collector
+                  ID *
+                </Text>
                 <TextInput
                   style={[
                     styles.input,
@@ -316,7 +338,11 @@ const styles = StyleSheet.create({
     color: "white",
     marginTop: SPACING.sm,
   },
-  scroll: { padding: SPACING.xxl },
+  scroll: { 
+    padding: SPACING.xxl,
+    flexGrow: 1,
+    paddingBottom: SPACING.xxxl,
+  },
   field: { marginBottom: 16 },
   label: {
     fontSize: 13,
@@ -395,14 +421,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   roleRow: { flexDirection: "row", gap: 12 },
+  roleGrid: { 
+    flexDirection: "column", 
+    gap: 12,
+    marginBottom: 12,
+  },
   roleBtn: {
-    flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderWidth: 2,
     borderColor: COLORS.border,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
   },
   roleBtnActive: {
     backgroundColor: COLORS.primary,
@@ -410,10 +442,34 @@ const styles = StyleSheet.create({
   },
   roleIcon: {
     fontSize: 28,
-    marginBottom: 8,
+    marginRight: 12,
   },
-  roleTxt: { color: COLORS.textSecondary, fontWeight: "600" },
+  roleTxt: { 
+    color: COLORS.textSecondary, 
+    fontWeight: "600",
+    fontSize: 15,
+    flex: 1,
+  },
   roleTxtActive: { color: COLORS.white },
+  roleDescription: {
+    backgroundColor: "#F0FDF4",
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  roleDescLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  roleDescText: {
+    fontSize: 13,
+    color: "#4B5563",
+    lineHeight: 18,
+  },
   illustrationContainer: {
     alignItems: "center",
     marginVertical: 24,
