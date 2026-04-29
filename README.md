@@ -3,13 +3,15 @@
 A civic waste management platform for BMC citizens.
 
 ## Three parts:
+
 - Mobile App (React Native + Expo) — citizen-facing
-- Backend API (Node.js + Express + MongoDB) — REST API  
+- Backend API (Node.js + Express + MongoDB) — REST API
 - Web Dashboard (React + Vite) — BMC officer panel
 
 ## Quick Start
 
 ### 1. Backend API
+
 ```bash
 cd api
 npm install
@@ -20,6 +22,7 @@ npm run dev     # runs on http://localhost:5000
 ```
 
 ### 2. Mobile App
+
 ```bash
 cd app
 npm install
@@ -29,6 +32,7 @@ npx expo start
 ```
 
 ### 3. Dashboard
+
 ```bash
 cd dashboard
 npm install
@@ -37,19 +41,24 @@ npm run dev     # opens on http://localhost:5173
 
 ## Test Accounts (from seed)
 
-| Role      | Phone       | Password    |
-|-----------|-------------|-------------|
-| Officer   | 9876543210  | password123 |
-| Collector | 9876543211  | password123 |
-| Citizen   | 9876543220  | password123 |
+| Role              | Phone          | Password        | Notes                          |
+| ----------------- | -------------- | --------------- | ------------------------------ |
+| Officer           | 9876543210     | password123     | Dashboard access               |
+| Society Collector | 9876543211     | password123     | QR scanning & household visits |
+| Society Collector | 9876543212     | password123     | QR scanning & household visits |
+| **BMC Collector** | **9876543230** | **password123** | **NEW: Bulk waste collection** |
+| **BMC Collector** | **9876543231** | **password123** | **NEW: Bulk waste collection** |
+| Citizen           | 9876543220     | password123     | Main app user                  |
 
 ## Key Features
+
 - QR scan → earn GreenPoints for waste segregation
 - Tiered penalty system with citizen appeals
 - Waste composition guide (6 categories)
 - Campaign quizzes with bonus points
 - BMC officer dashboard with compliance charts
 - Violation management with appeal review
+- **NEW: BMC Collector bulk waste collection tracking** 🚛
 
 # GreenPoint Mumbai: Civic Waste Management & Rewards Platform
 
@@ -60,9 +69,11 @@ Welcome to **GreenPoint Mumbai**, a state-of-the-art civic technology platform d
 ## 1. Project Overview
 
 ### Purpose & Goals
+
 Mumbai generates over 7,000 metric tonnes of solid waste daily. Source segregation is the most critical yet under-implemented step in waste management. **GreenPoint Mumbai** provides a digital bridge between citizens and waste collectors, ensuring that proper segregation is verified at the doorstep and rewarded instantly.
 
 ### Key Features
+
 - **Doorstep QR Verification:** Every household is assigned a unique, trackable QR code.
 - **Collector-Verified Segregation:** Waste collectors use the mobile app to verify waste quality before awarding points.
 - **Points & Rewards Engine:** Earn GreenPoints for segregation, composting, and recycling drop-offs.
@@ -109,6 +120,7 @@ greenpoint-mumbai/
 ## 3. Installation & Setup
 
 ### Prerequisites
+
 - **Node.js**: v18.x or higher
 - **MongoDB**: v6.x or higher
 - **Expo Go**: Installed on a mobile device for app testing
@@ -116,10 +128,11 @@ greenpoint-mumbai/
 ### Local Environment Setup
 
 1. **Clone and Install:**
+
    ```bash
    git clone https://github.com/your-org/greenpoint-mumbai.git
    cd greenpoint-mumbai
-   
+
    # Install dependencies for all components
    cd api && npm install
    cd ../app && npm install
@@ -128,8 +141,9 @@ greenpoint-mumbai/
 
 2. **Environment Configuration:**
    Create `.env` files in `api/` and `app/`:
-   
+
    **api/.env**:
+
    ```env
    PORT=5000
    MONGO_URI=mongodb://localhost:27017/greenpoint
@@ -137,19 +151,21 @@ greenpoint-mumbai/
    ```
 
 3. **Seed the Database:**
+
    ```bash
    cd api
    npm run seed
    ```
 
 4. **Run the Services:**
+
    ```bash
    # Backend (from /api)
    npm run dev
-   
+
    # Mobile App (from /app)
    npx expo start
-   
+
    # Dashboard (from /dashboard)
    npm run dev
    ```
@@ -159,11 +175,13 @@ greenpoint-mumbai/
 ## 4. Usage Guide
 
 ### Roles & Access
+
 - **Citizen:** Scans QR to show to collector, earns points, views leaderboard.
 - **Collector:** Scans household QR, verifies waste, takes photo, submits scan.
 - **Officer/Admin:** Views the dashboard to manage households and audit collectors.
 
 ### Core Workflows
+
 1. **Waste Collection:** Collector opens "Scan" -> Scans Household QR -> Selects "Segregated" -> Inputs Weight -> Takes Photo -> Submits.
 2. **Earning Points:** Once submitted, the Citizen instantly receives 10 GreenPoints.
 3. **Redemption:** Citizens go to the "Rewards" tab to exchange points for BEST Bus credits or utility discounts.
@@ -173,15 +191,19 @@ greenpoint-mumbai/
 ## 5. Architecture & Models
 
 ### System Architecture
+
 The platform follows a **Hub-and-Spoke** architecture. The **Express API** acts as the central hub, managing state across the **Citizen App**, **Collector App**, and **Admin Dashboard**.
 
 ### Anti-Fraud Logic
+
 Every scan passes through the `antifraud.js` engine:
+
 - **GPS Check:** Validates if the collector is within the allowed Ward boundary.
 - **Ward Match:** Ensures the collector is assigned to the same ward as the household.
 - **Cooldown:** Prevents multiple scans of the same household within a 24-hour window.
 
 ### Key Schemas
+
 - **User:** Role-based (Citizen, Collector, Officer).
 - **PointEvent:** Records every transaction (Earn, Deduct, Redeem).
 - **Household:** Links a citizen to a physical location and QR code.
@@ -200,13 +222,16 @@ Every scan passes through the `antifraud.js` engine:
 ## 7. Testing
 
 ### Backend
+
 Run the seeding script to test population:
+
 ```bash
 cd api
 npm run seed
 ```
 
 ### Mobile
+
 Use the **"Use Test QR"** button in the Collector scanner to simulate a successful scan without a physical QR code.
 
 ---
@@ -222,13 +247,15 @@ Use the **"Use Test QR"** button in the Collector scanner to simulate a successf
 ## 9. License & Credits
 
 ### License
+
 Proprietary - Developed for BMC Mumbai.
 
 ### Acknowledgments
+
 - **UI Design:** Inspired by modern, breathable civic interfaces.
 - **Maps:** Utilizing Leaflet for ward-boundary visualizations.
 - **Icons:** Ionicons and Material Community Icons.
 
 ---
-*GreenPoint Mumbai © 2024. Tech for a Cleaner Tomorrow.*
 
+_GreenPoint Mumbai © 2024. Tech for a Cleaner Tomorrow._

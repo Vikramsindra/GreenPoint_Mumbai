@@ -27,15 +27,20 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['citizen', 'collector', 'officer'],
+    enum: ['citizen', 'collector', 'bmc_collector', 'officer'],
     default: 'citizen'
   },
   collectorId: {
     type: String,
-    required: function () { return this.role === 'collector'; },
+    required: function () { return this.role === 'collector' || this.role === 'bmc_collector'; },
     trim: true,
     default: null,
     sparse: true
+  },
+  assignedCollectionPoints: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'CollectionPoint',
+    default: []
   },
   wardId: {
     type: String,

@@ -129,10 +129,10 @@ export default function HomeScreen() {
                 <Text style={{fontSize: 20}}>🧑🏽</Text>
               </View>
               <View>
-                <Text style={styles.greeting}>Hi, {user?.name?.split(' ')[0] || 'Vikram'}!</Text>
+                <Text style={styles.greeting}>Hi, {user?.name?.split(' ')[0] || 'User'}!</Text>
                 <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 2}}>
                   <Ionicons name="happy-outline" size={14} color="rgba(255,255,255,0.9)" />
-                  <Text style={styles.statusText}> Active Citizen</Text>
+                  <Text style={styles.statusText}> {user?.role === 'citizen' ? 'Active Citizen' : user?.role === 'collector' ? 'Society Collector' : 'Waste Manager'}</Text>
                 </View>
               </View>
             </View>
