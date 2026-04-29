@@ -241,17 +241,50 @@ router.post('/collector-scan', auth, requireRole('collector'), validate(collecto
     const { qrCode, location, note } = req.body;
     const collectorId = req.user.id;
     const collectorWardId = req.user.wardId;
+    const mongoose = require('mongoose');
+    const { generateQRCodeString, generateQRCodeImage } = require('../utils/qrGenerator');
 
-    // 1. Find household by qrCode
-    const household = await Household.findOne({ qrCode, isActive: true }).populate('citizenId');
+    // 1. Find household — try multiple lookup strategies
+    let household = null;
+    let citizen = null;
+
+    // Strategy A: Look up by QR code string (GP-HH-... format)
+    household = await Household.findOne({ qrCode, isActive: true }).populate('citizenId');
+
+    // Strategy B: Look up household by citizen user ID
+    if (!household && mongoose.Types.ObjectId.isValid(qrCode)) {
+      household = await Household.findOne({ citizenId: qrCode, isActive: true }).populate('citizenId');
+    }
+
+    // Strategy C: Citizen exists but has no household — auto-create one
+    if (!household && mongoose.Types.ObjectId.isValid(qrCode)) {
+      const foundCitizen = await User.findOne({ _id: qrCode, role: 'citizen', isActive: true });
+      if (foundCitizen) {
+        const newQrCode = generateQRCodeString();
+        const qrImageUrl = await generateQRCodeImage(newQrCode);
+        household = await Household.create({
+          citizenId: foundCitizen._id,
+          address: `Auto-registered — ${foundCitizen.name}`,
+          wardId: foundCitizen.wardId || 'N-WARD',
+          societyId: foundCitizen.societyId || '',
+          qrCode: newQrCode,
+          qrImageUrl,
+          isActive: true,
+        });
+        await User.findByIdAndUpdate(foundCitizen._id, { householdId: household._id });
+        // Re-populate citizenId
+        household = await Household.findById(household._id).populate('citizenId');
+      }
+    }
+
     if (!household) {
       return res.status(404).json({
         success: false,
-        message: 'QR code not recognised. This household may not be registered in GreenPoint.',
+        message: 'QR code not recognised. This citizen may not be registered in GreenPoint.',
       });
     }
 
-    const citizen = household.citizenId;
+    citizen = household.citizenId;
     if (!citizen || !citizen.isActive) {
       return res.status(404).json({
         success: false,
@@ -296,7 +329,7 @@ router.post('/collector-scan', auth, requireRole('collector'), validate(collecto
       {
         collectorId: collectorId.toString(),
         householdId: household._id.toString(),
-        householdQrCode: qrCode,
+        householdQrCode: household.qrCode,
         location: location || null,
         note: note || '',
       }

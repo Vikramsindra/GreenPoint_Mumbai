@@ -45,6 +45,28 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     const user = new User(userData);
     await user.save();
 
+    // Auto-create household with QR code for citizens
+    if (role === 'citizen' || !role) {
+      try {
+        const Household = require('../models/Household');
+        const { generateQRCodeString, generateQRCodeImage } = require('../utils/qrGenerator');
+        const qrCode = generateQRCodeString();
+        const qrImageUrl = await generateQRCodeImage(qrCode);
+        const household = await Household.create({
+          citizenId: user._id,
+          address: `Registered via app — ${name}`,
+          wardId: wardId || 'N-WARD',
+          societyId: '',
+          qrCode,
+          qrImageUrl,
+          isActive: true,
+        });
+        await User.findByIdAndUpdate(user._id, { householdId: household._id });
+      } catch (hhErr) {
+        console.error('Auto-household creation failed (non-blocking):', hhErr.message);
+      }
+    }
+
     const token = jwt.sign(
       { id: user._id, phone: user.phone, role: user.role, wardId: user.wardId },
       process.env.JWT_SECRET,

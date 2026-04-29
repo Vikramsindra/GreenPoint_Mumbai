@@ -48,7 +48,11 @@ export default function SideMenu() {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/(tabs)/home')}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => {
+                if (user?.role === 'collector') navigateTo('/(collector)/round');
+                else if (user?.role === 'bmc_collector') navigateTo('/(bmc-collector)/dashboard');
+                else navigateTo('/(tabs)/home');
+              }}>
                 <Ionicons name="home-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
                 <Text style={styles.menuText}>Home</Text>
               </TouchableOpacity>

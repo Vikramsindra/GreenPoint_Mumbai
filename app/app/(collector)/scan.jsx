@@ -65,13 +65,13 @@ export default function CollectorScanScreen() {
     if (scanned) return;
     setScanned(true);
 
-    if (!data.startsWith('GP-HH-')) {
-      setScanResult({ success: false, message: 'Invalid QR Code. Please scan a valid GreenPoint household QR.' });
+    if (!data || data.trim().length === 0) {
+      setScanResult({ success: false, message: 'Empty QR Code. Please scan a valid GreenPoint QR.' });
       setStep(STEPS.RESULT);
       return;
     }
 
-    setScannedQR(data);
+    setScannedQR(data.trim());
     setStep(STEPS.DETAILS);
   };
 
@@ -140,7 +140,6 @@ export default function CollectorScanScreen() {
       setScanResult(res.data);
       setStep(STEPS.RESULT);
     } catch (err) {
-      console.error(err);
       setScanResult({
         success: false,
         message: err.response?.data?.message || 'Scan failed. Please check your connection and try again.'

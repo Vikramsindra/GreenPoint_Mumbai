@@ -61,6 +61,13 @@ export default function RootLayout() {
     } else if (token && !inAuthGroup) {
       // User is already logged in but on wrong page - ensure correct routing
       const currentPage = segments[0];
+      
+      // Whitelist shared top-level pages
+      const allowedSharedPages = ['profile', 'leaderboard', 'rewards-history'];
+      if (allowedSharedPages.includes(currentPage)) {
+        return; // Don't redirect, let them view the shared page
+      }
+
       if (user?.role === "collector" && currentPage !== "(collector)") {
         router.replace("/(collector)/round");
       } else if (user?.role === "bmc_collector" && currentPage !== "(bmc-collector)") {

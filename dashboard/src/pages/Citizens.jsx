@@ -103,7 +103,7 @@ export default function Citizens() {
               ) : (
                 res?.data?.citizens?.map((c, idx) => (
                   <tr key={c._id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-center text-lg">{sortBy === '' ? getRankBadge(idx, page) : '-'}</td>
+                    <td className="px-6 py-4 text-center text-lg">{(sortBy === '' && search === '') ? getRankBadge(idx, page) : '-'}</td>
                     <td className="px-6 py-4 font-semibold text-gray-900 truncate">{c.name}</td>
                     <td className="px-6 py-4 text-gray-600 font-mono text-xs">{c.phone}</td>
                     <td className="px-6 py-4 text-gray-500 truncate text-xs">{c.societyId || '—'}</td>

@@ -116,7 +116,13 @@ export default function WardOverview() {
                     <td className="px-5 py-3 font-medium text-gray-900">{v.citizenId?.name}</td>
                     <td className="px-5 py-3 text-gray-600">{v.type.replace('_',' ')}</td>
                     <td className="px-5 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${v.status === 'PENDING' ? 'bg-orange-100 text-orange-800' : v.status === 'FINE_ISSUED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        v.status === 'PENDING' ? 'bg-orange-100 text-orange-800' : 
+                        v.status === 'FINE_ISSUED' ? 'bg-red-100 text-red-800' : 
+                        v.status === 'APPEALED' ? 'bg-blue-100 text-blue-800' :
+                        v.status === 'RESOLVED' ? 'bg-green-100 text-green-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
                         {v.status}
                       </span>
                     </td>

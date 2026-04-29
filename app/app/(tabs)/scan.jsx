@@ -124,8 +124,27 @@ export default function ScanScreen() {
   // -----------------------------------------
   // CITIZEN VIEW: Show their personal QR Code
   // -----------------------------------------
+  // State for citizen household QR
+  const [householdQR, setHouseholdQR] = useState(null);
+  const [householdLoading, setHouseholdLoading] = useState(false);
+
+  useEffect(() => {
+    if (isCitizen) {
+      setHouseholdLoading(true);
+      api.getMyHousehold()
+        .then(res => {
+          if (res.data?.success && res.data.data?.household) {
+            setHouseholdQR(res.data.data.household.qrCode);
+          }
+        })
+        .catch(err => console.log('Failed to fetch household QR:', err))
+        .finally(() => setHouseholdLoading(false));
+    }
+  }, [isCitizen]);
+
   if (isCitizen) {
-    const qrData = user?._id ? user._id : 'NO_ID_AVAILABLE';
+    // Use household QR code (GP-HH-... format) so collectors can scan it
+    const qrData = householdQR || user?._id || 'NO_QR_AVAILABLE';
     const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qrData)}&margin=20`;
 
     return (
@@ -155,16 +174,26 @@ export default function ScanScreen() {
 
         <View style={styles.citizenContent}>
           <View style={styles.qrCard}>
-            <View style={styles.qrImageWrapper}>
-              <Image 
-                source={{ uri: qrImageUrl }} 
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
-            </View>
+            {householdLoading ? (
+              <View style={[styles.qrImageWrapper, { alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>Loading QR...</Text>
+              </View>
+            ) : (
+              <View style={styles.qrImageWrapper}>
+                <Image 
+                  source={{ uri: qrImageUrl }} 
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
             <View style={styles.qrUserDetails}>
               <Text style={styles.qrHelperText}>{user?.name}</Text>
-              <Text style={styles.qrUserId}>ID: {user?._id?.substring(0, 10).toUpperCase()}</Text>
+              {householdQR ? (
+                <Text style={styles.qrUserId}>{householdQR}</Text>
+              ) : (
+                <Text style={styles.qrUserId}>ID: {user?._id?.substring(0, 10).toUpperCase()}</Text>
+              )}
             </View>
             
             <TouchableOpacity style={styles.downloadBtn} onPress={() => downloadQR(qrImageUrl)}>
