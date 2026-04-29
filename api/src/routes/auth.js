@@ -12,9 +12,9 @@ const registerSchema = Joi.object({
   name: Joi.string().min(2).required(),
   phone: Joi.string().pattern(/^\d{10}$/).required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().valid('citizen', 'collector', 'officer').default('citizen'),
+  role: Joi.string().valid('citizen', 'collector', 'bmc_collector', 'officer').default('citizen'),
   collectorId: Joi.when('role', {
-    is: 'collector',
+    is: Joi.alternatives().try('collector', 'bmc_collector'),
     then: Joi.string().min(3).required(),
     otherwise: Joi.string().allow('')
   }),
@@ -29,16 +29,16 @@ router.post('/register', validate(registerSchema), async (req, res) => {
       return res.status(409).json({ success: false, message: 'Phone number already registered' });
     }
 
-    // Validate collectorId is provided for collector role
-    if (role === 'collector' && !collectorId) {
-      return res.status(400).json({ success: false, message: 'BMC Collector ID is required for collector registration' });
+    // Validate collectorId is provided for collector/bmc_collector roles
+    if ((role === 'collector' || role === 'bmc_collector') && !collectorId) {
+      return res.status(400).json({ success: false, message: 'Collector ID is required for this role' });
     }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const userData = { name, phone, passwordHash, role, wardId };
-    if (role === 'collector') {
+    if (role === 'collector' || role === 'bmc_collector') {
       userData.collectorId = collectorId;
     }
 

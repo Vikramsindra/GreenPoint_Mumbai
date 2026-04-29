@@ -8,6 +8,8 @@ const PointEvent = require('./models/PointEvent');
 const Violation = require('./models/Violation');
 const QuizResult = require('./models/QuizResult');
 const Household = require('./models/Household');
+const CollectionPoint = require('./models/CollectionPoint');
+const BulkCollection = require('./models/BulkCollection');
 const connectDB = require('./config/db');
 const { generateQRCodeString, generateQRCodeImage } = require('./utils/qrGenerator');
 
@@ -20,6 +22,8 @@ const SEED = async () => {
     await Violation.deleteMany({});
     await PointEvent.deleteMany({});
     await Campaign.deleteMany({});
+    await BulkCollection.deleteMany({});
+    await CollectionPoint.deleteMany({});
     await Household.deleteMany({});
     await User.deleteMany({});
 
@@ -30,6 +34,27 @@ const SEED = async () => {
     const officer = await User.create({ name: 'Rajesh Patil', phone: '9876543210', passwordHash, role: 'officer', wardId: 'N-WARD' });
     const collector1 = await User.create({ name: 'Ramesh Yadav', phone: '9876543211', passwordHash, role: 'collector', wardId: 'N-WARD', collectorId: 'COL1001' });
     const collector2 = await User.create({ name: 'Suresh Kamble', phone: '9876543212', passwordHash, role: 'collector', wardId: 'N-WARD', collectorId: 'COL1002' });
+    
+    // BMC Collectors
+    const bmcCollector1 = await User.create({ 
+      name: 'Vikram Deshmukh', 
+      phone: '9876543230', 
+      passwordHash, 
+      role: 'bmc_collector', 
+      wardId: 'N-WARD', 
+      collectorId: 'BMC1001' 
+    });
+    console.log(`✅ Created BMC Collector: ${bmcCollector1.name} (${bmcCollector1.phone}) - Role: ${bmcCollector1.role}`);
+    
+    const bmcCollector2 = await User.create({ 
+      name: 'Pradeep Sharma', 
+      phone: '9876543231', 
+      passwordHash, 
+      role: 'bmc_collector', 
+      wardId: 'N-WARD', 
+      collectorId: 'BMC1002' 
+    });
+    console.log(`✅ Created BMC Collector: ${bmcCollector2.name} (${bmcCollector2.phone}) - Role: ${bmcCollector2.role}`);
 
     const citizenParams = [
       { name: 'Priya Sharma', phone: '9876543220', societyId: 'SUNRISE-APT' },
@@ -83,6 +108,71 @@ const SEED = async () => {
     // Log QR codes for testing
     households.forEach((h, i) => {
       console.log(`   Household ${i+1}: ${h.qrCode} — ${h.address.split(',')[0]}`);
+    });
+
+    console.log('Creating collection points for BMC collectors...');
+    const collectionPoints = await CollectionPoint.insertMany([
+      {
+        name: 'Sunrise Apartments',
+        type: 'society',
+        location: { lat: 19.1136, lng: 72.8697 },
+        address: 'LBS Marg, Ghatkopar East',
+        wardId: 'N-WARD',
+        assignedCollectorId: bmcCollector1._id,
+        contactPerson: 'Rajesh Sharma (Society Secretary)',
+        contactPhone: '9876543240'
+      },
+      {
+        name: 'Green Valley CHS',
+        type: 'society',
+        location: { lat: 19.1147, lng: 72.9247 },
+        address: 'Vikhroli West',
+        wardId: 'N-WARD',
+        assignedCollectorId: bmcCollector1._id,
+        contactPerson: 'Anjali Gupta (Society Secretary)',
+        contactPhone: '9876543241'
+      },
+      {
+        name: 'Shivaji Nagar Chawl',
+        type: 'society',
+        location: { lat: 19.0412, lng: 72.8552 },
+        address: 'Govandi',
+        wardId: 'N-WARD',
+        assignedCollectorId: bmcCollector2._id,
+        contactPerson: 'Mohammed Khan (Society Representative)',
+        contactPhone: '9876543242'
+      },
+      {
+        name: 'Public Bin - LBS Road Junction',
+        type: 'public_bin',
+        location: { lat: 19.1140, lng: 72.8710 },
+        address: 'LBS Marg Junction, Ghatkopar',
+        wardId: 'N-WARD',
+        assignedCollectorId: bmcCollector1._id
+      },
+      {
+        name: 'Public Bin - Vikhroli Market',
+        type: 'public_bin',
+        location: { lat: 19.1160, lng: 72.9260 },
+        address: 'Vikhroli West Main Market',
+        wardId: 'N-WARD',
+        assignedCollectorId: bmcCollector1._id
+      },
+      {
+        name: 'Transfer Point - Govandi',
+        type: 'transfer_station',
+        location: { lat: 19.0400, lng: 72.8540 },
+        address: 'Govandi Transfer Station',
+        wardId: 'N-WARD',
+        assignedCollectorId: bmcCollector2._id,
+        contactPerson: 'Station Manager',
+        contactPhone: '9876543243'
+      }
+    ]);
+
+    console.log(`✅ Created ${collectionPoints.length} collection points`);
+    collectionPoints.forEach((p, i) => {
+      console.log(`   Point ${i+1}: ${p.name} (${p.type})`);
     });
 
     console.log('Creating campaigns...');
@@ -174,10 +264,14 @@ const SEED = async () => {
     const totalViolations = await Violation.countDocuments();
     const totalQuizResults = await QuizResult.countDocuments();
     const totalHouseholds = await Household.countDocuments();
+    const totalCollectionPoints = await CollectionPoint.countDocuments();
+    const totalBulkCollections = await BulkCollection.countDocuments();
 
     console.log(`\n✅ Seed completed successfully!`);
-    console.log(`- Users: ${totalUsers}`);
+    console.log(`- Users: ${totalUsers} (including 2 BMC Collectors)`);
     console.log(`- Households: ${totalHouseholds}`);
+    console.log(`- Collection Points: ${totalCollectionPoints}`);
+    console.log(`- Bulk Collections: ${totalBulkCollections}`);
     console.log(`- Campaigns: ${totalCampaigns}`);
     console.log(`- PointEvents: ${totalPointEvents}`);
     console.log(`- Violations: ${totalViolations}`);

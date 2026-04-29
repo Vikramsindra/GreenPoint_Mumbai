@@ -12,6 +12,8 @@ const pointsRoutes = require('./routes/points');
 const violationsRoutes = require('./routes/violations');
 const awarenessRoutes = require('./routes/awareness');
 const dashboardRoutes = require('./routes/dashboard');
+const bmcCollectionsRoutes = require('./routes/bmcCollections');
+const collectionPointsRoutes = require('./routes/collectionPoints');
 
 // Import cron jobs
 require('./jobs/penaltyReset');
@@ -41,6 +43,8 @@ app.use('/api/points', pointsRoutes);
 app.use('/api/violations', violationsRoutes);
 app.use('/api/awareness', awarenessRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/bmc-collections', bmcCollectionsRoutes);
+app.use('/api/collection-points', collectionPointsRoutes);
 
 const householdRoutes = require('./routes/households');
 app.use('/api/households', householdRoutes);
