@@ -9,7 +9,7 @@ const bulkCollectionSchema = new mongoose.Schema({
   collectionPointId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'CollectionPoint',
-    required: true
+    default: null
   },
   wasteType: {
     type: String,

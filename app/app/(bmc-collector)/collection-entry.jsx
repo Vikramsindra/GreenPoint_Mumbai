@@ -10,16 +10,19 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "../../store/authStore";
+import { useCollectionStore } from "../../store/collectionStore";
 import * as api from "../../services/api";
 
 export default function CollectionEntryScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { recordCollection } = useCollectionStore();
 
   const [collectionPoints, setCollectionPoints] = useState([]);
   const [selectedPoint, setSelectedPoint] = useState(null);
@@ -29,6 +32,10 @@ export default function CollectionEntryScreen() {
   const [loading, setLoading] = useState(false);
   const [pointsLoading, setPointsLoading] = useState(true);
   const [showPointsModal, setShowPointsModal] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [manualEntry, setManualEntry] = useState(false);
+  const [manualPointName, setManualPointName] = useState("");
+  const successAnim = new Animated.Value(0);
 
   const wasteTypes = ["wet", "dry", "mixed", "bulk"];
 
@@ -38,21 +45,37 @@ export default function CollectionEntryScreen() {
 
   const fetchCollectionPoints = async () => {
     try {
+      console.log("📍 Fetching assigned collection points...");
       const res = await api.getAssignedCollectionPoints();
+      console.log("📍 API Response:", res);
+      console.log("📍 Response data:", res.data);
       if (res.data?.success) {
+        console.log("📍 Setting collection points:", res.data.data);
         setCollectionPoints(res.data.data);
+      } else {
+        console.log("❌ API returned success=false", res.data);
+        Alert.alert(
+          "Error",
+          res.data?.message || "Failed to load collection points",
+        );
       }
     } catch (err) {
-      console.error("Failed to fetch collection points:", err);
-      Alert.alert("Error", "Failed to load collection points");
+      console.error("❌ Failed to fetch collection points:", err);
+      console.error("Error details:", err.message);
+      console.error("Error response:", err.response?.data);
+      Alert.alert(
+        "Error",
+        "Failed to load collection points: " +
+          (err.response?.data?.message || err.message),
+      );
     } finally {
       setPointsLoading(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (!selectedPoint) {
-      Alert.alert("Error", "Please select a collection point");
+    if (!selectedPoint && !manualPointName) {
+      Alert.alert("Error", "Please select or enter a collection point");
       return;
     }
     if (!wasteType) {
@@ -66,22 +89,60 @@ export default function CollectionEntryScreen() {
 
     setLoading(true);
     try {
-      const res = await api.logBMCCollection({
-        collectionPointId: selectedPoint._id,
+      // For manual entry, send null for collectionPointId and include manualPointName
+      const payload = {
+        collectionPointId: selectedPoint ? selectedPoint._id : null,
         wasteType,
         weight: parseFloat(weight),
-        notes,
-      });
+        notes: manualEntry ? `Manual Entry: ${notes}` : notes,
+        location: selectedPoint ? selectedPoint.location : { lat: 0, lng: 0 },
+      };
+
+      // If manual entry, add the point name
+      if (manualEntry && manualPointName) {
+        payload.manualPointName = manualPointName;
+      }
+
+      const res = await api.logBMCCollection(payload);
 
       if (res.data?.success) {
-        Alert.alert("Success", "Collection logged successfully!");
+        // Trigger dashboard refresh
+        recordCollection();
+
+        // Show success message
+        setSuccessVisible(true);
+
+        // Animate success message
+        Animated.sequence([
+          Animated.timing(successAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.delay(2000),
+          Animated.timing(successAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
         // Reset form
         setSelectedPoint(null);
+        setManualPointName("");
         setWasteType(null);
         setWeight("");
         setNotes("");
+        setManualEntry(false);
+
         // Refresh collection points to update status
         fetchCollectionPoints();
+
+        // Navigate back to dashboard after 2.5 seconds
+        setTimeout(() => {
+          setSuccessVisible(false);
+          router.push("/(bmc-collector)/dashboard");
+        }, 2500);
       } else {
         Alert.alert("Error", res.data?.message || "Failed to log collection");
       }
@@ -123,48 +184,86 @@ export default function CollectionEntryScreen() {
           {/* Collection Point Selection */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Collection Point *</Text>
-            <TouchableOpacity
-              style={[
-                styles.selectButton,
-                selectedPoint && styles.selectButtonActive,
-              ]}
-              onPress={() => setShowPointsModal(true)}
-            >
-              <View style={styles.selectButtonContent}>
-                <MaterialCommunityIcons
-                  name={
-                    selectedPoint ? "map-marker-check" : "map-marker-outline"
-                  }
-                  size={20}
-                  color={selectedPoint ? "#0d47a1" : "#999"}
-                />
-                <Text
+
+            {!manualEntry ? (
+              <>
+                <TouchableOpacity
                   style={[
-                    styles.selectButtonText,
-                    !selectedPoint && styles.placeholder,
+                    styles.selectButton,
+                    selectedPoint && styles.selectButtonActive,
                   ]}
+                  onPress={() => setShowPointsModal(true)}
                 >
-                  {selectedPoint
-                    ? selectedPoint.name
-                    : "Select collection point"}
-                </Text>
-              </View>
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={20}
-                color="#999"
-              />
-            </TouchableOpacity>
-            {selectedPoint && (
-              <View style={styles.selectedInfo}>
-                <Text style={styles.selectedLabel}>
-                  {selectedPoint.type.replace("_", " ").toUpperCase()}
-                </Text>
-                <Text style={styles.selectedAddress}>
-                  {selectedPoint.address}
-                </Text>
+                  <View style={styles.selectButtonContent}>
+                    <MaterialCommunityIcons
+                      name={
+                        selectedPoint
+                          ? "map-marker-check"
+                          : "map-marker-outline"
+                      }
+                      size={20}
+                      color={selectedPoint ? "#0d47a1" : "#999"}
+                    />
+                    <Text
+                      style={[
+                        styles.selectButtonText,
+                        !selectedPoint && styles.placeholder,
+                      ]}
+                    >
+                      {selectedPoint
+                        ? selectedPoint.name
+                        : "Select collection point"}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={20}
+                    color="#999"
+                  />
+                </TouchableOpacity>
+                {selectedPoint && (
+                  <View style={styles.selectedInfo}>
+                    <Text style={styles.selectedLabel}>
+                      {selectedPoint.type?.replace("_", " ").toUpperCase() ||
+                        "COLLECTION POINT"}
+                    </Text>
+                    <Text style={styles.selectedAddress}>
+                      {selectedPoint.address || "No address provided"}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={styles.inputContainer}>
+                <MaterialCommunityIcons name="pencil" size={20} color="#999" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter society/collection point name"
+                  placeholderTextColor="#ccc"
+                  value={manualPointName}
+                  onChangeText={setManualPointName}
+                />
               </View>
             )}
+
+            {/* Toggle Manual Entry */}
+            <TouchableOpacity
+              style={styles.toggleManualButton}
+              onPress={() => {
+                setManualEntry(!manualEntry);
+                setSelectedPoint(null);
+                setManualPointName("");
+              }}
+            >
+              <MaterialCommunityIcons
+                name={manualEntry ? "keyboard" : "pencil"}
+                size={16}
+                color="#0d47a1"
+              />
+              <Text style={styles.toggleManualText}>
+                {manualEntry ? "Select from list" : "Enter manually"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Waste Type Selection */}
@@ -283,40 +382,80 @@ export default function CollectionEntryScreen() {
             </View>
 
             <FlatList
-              data={collectionPoints}
+              data={[
+                { _id: "manual", name: "📝 Enter Manually", isManual: true },
+                ...collectionPoints,
+              ]}
               keyExtractor={(item) => item._id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.pointItem}
-                  onPress={() => {
-                    setSelectedPoint(item);
-                    setShowPointsModal(false);
-                  }}
-                >
-                  <View style={styles.pointItemContent}>
-                    <View>
-                      <Text style={styles.pointName}>{item.name}</Text>
-                      <Text style={styles.pointType}>
-                        {item.type.replace("_", " ").toUpperCase()}
-                      </Text>
-                      <Text style={styles.pointAddress}>{item.address}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor:
-                            item.status === "completed" ? "#10b981" : "#fbbf24",
-                        },
-                      ]}
+              renderItem={({ item }) => {
+                if (item.isManual) {
+                  return (
+                    <TouchableOpacity
+                      style={[styles.pointItem, styles.manualEntryItem]}
+                      onPress={() => {
+                        setManualEntry(true);
+                        setShowPointsModal(false);
+                      }}
                     >
-                      <Text style={styles.statusText}>
-                        {item.status === "completed" ? "Done" : "Pending"}
-                      </Text>
+                      <View style={styles.pointItemContent}>
+                        <View>
+                          <Text
+                            style={[styles.pointName, styles.manualEntryText]}
+                          >
+                            {item.name}
+                          </Text>
+                          <Text style={styles.pointType}>
+                            Enter collection point name manually
+                          </Text>
+                        </View>
+                      </View>
+                      <MaterialCommunityIcons
+                        name="pencil"
+                        size={20}
+                        color="#0d47a1"
+                      />
+                    </TouchableOpacity>
+                  );
+                }
+                return (
+                  <TouchableOpacity
+                    style={styles.pointItem}
+                    onPress={() => {
+                      setSelectedPoint(item);
+                      setManualEntry(false);
+                      setShowPointsModal(false);
+                    }}
+                  >
+                    <View style={styles.pointItemContent}>
+                      <View>
+                        <Text style={styles.pointName}>{item.name}</Text>
+                        <Text style={styles.pointType}>
+                          {item.type?.replace("_", " ").toUpperCase() ||
+                            "POINT"}
+                        </Text>
+                        <Text style={styles.pointAddress}>
+                          {item.address || "No address provided"}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          {
+                            backgroundColor:
+                              item.status === "completed"
+                                ? "#10b981"
+                                : "#fbbf24",
+                          },
+                        ]}
+                      >
+                        <Text style={styles.statusText}>
+                          {item.status === "completed" ? "Done" : "Pending"}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              )}
+                  </TouchableOpacity>
+                );
+              }}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <MaterialCommunityIcons
@@ -327,12 +466,49 @@ export default function CollectionEntryScreen() {
                   <Text style={styles.emptyText}>
                     No collection points assigned
                   </Text>
+                  <Text style={styles.emptySubtext}>
+                    Use "Enter Manually" option to add collection point
+                  </Text>
                 </View>
               }
             />
           </View>
         </View>
       </Modal>
+
+      {/* Success Message */}
+      {successVisible && (
+        <Animated.View
+          style={[
+            styles.successMessage,
+            {
+              opacity: successAnim,
+              transform: [
+                {
+                  translateY: successAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <View style={styles.successContent}>
+            <MaterialCommunityIcons
+              name="check-circle"
+              size={24}
+              color="#fff"
+            />
+            <Text style={styles.successText}>
+              Collection Logged Successfully!
+            </Text>
+          </View>
+          <Text style={styles.successSubtext}>
+            Your data has been recorded. Returning to dashboard...
+          </Text>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -563,5 +739,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
     marginTop: 8,
+  },
+  successMessage: {
+    position: "absolute",
+    top: 60,
+    left: 16,
+    right: 16,
+    backgroundColor: "#10b981",
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  successContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  successText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    flex: 1,
+  },
+  successSubtext: {
+    color: "#d1f3e8",
+    fontSize: 12,
+    marginTop: 6,
+    fontStyle: "italic",
+  },
+  toggleManualButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#f0f7ff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0d47a1",
+  },
+  toggleManualText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0d47a1",
+  },
+  manualEntryItem: {
+    backgroundColor: "#f9fafb",
+    borderBottomWidth: 2,
+    borderBottomColor: "#0d47a1",
+  },
+  manualEntryText: {
+    color: "#0d47a1",
+    fontWeight: "700",
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: "#ccc",
+    marginTop: 4,
   },
 });
