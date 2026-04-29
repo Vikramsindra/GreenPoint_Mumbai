@@ -1,7 +1,7 @@
 // src/jobs/penaltyEscalation.js
 
 const cron = require('node-cron');
-const User = require('../../models/User');
+const User = require('../models/User');
 
 // ─── Monthly Violation Window Reset ──────────────────────────────────────────
 
