@@ -11,9 +11,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useCollectionStore } from "../../store/collectionStore";
 import * as api from "../../services/api";
 
 export default function HistoryScreen() {
+  const { lastCollectionTime, clearTrigger } = useCollectionStore();
+
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +57,15 @@ export default function HistoryScreen() {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  // Listen for new collections and refresh history
+  useEffect(() => {
+    if (lastCollectionTime) {
+      console.log("New collection detected, refreshing history...");
+      fetchHistory();
+      clearTrigger();
+    }
+  }, [lastCollectionTime, clearTrigger]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

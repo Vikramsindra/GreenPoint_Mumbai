@@ -12,10 +12,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useCollectionStore } from "../../store/collectionStore";
 import * as api from "../../services/api";
 
 export default function RouteScreen() {
   const router = useRouter();
+  const { lastCollectionTime, clearTrigger } = useCollectionStore();
+
   const [collectionPoints, setCollectionPoints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,6 +56,15 @@ export default function RouteScreen() {
   useEffect(() => {
     fetchRoute();
   }, [fetchRoute]);
+
+  // Listen for new collections and refresh route
+  useEffect(() => {
+    if (lastCollectionTime) {
+      console.log("New collection detected, refreshing route...");
+      fetchRoute();
+      clearTrigger();
+    }
+  }, [lastCollectionTime, clearTrigger]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

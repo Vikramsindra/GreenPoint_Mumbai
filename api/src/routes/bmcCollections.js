@@ -9,11 +9,12 @@ const User = require('../models/User');
 
 // Validation schemas
 const createCollectionSchema = Joi.object({
-  collectionPointId: Joi.string().required(),
+  collectionPointId: Joi.string().allow(null, ''),
   wasteType: Joi.string().valid('wet', 'dry', 'mixed', 'bulk').required(),
   weight: Joi.number().min(0).required(),
   photoUrl: Joi.string().allow(''),
   notes: Joi.string().allow(''),
+  manualPointName: Joi.string().allow(''),
   location: Joi.object({
     lat: Joi.number(),
     lng: Joi.number()
@@ -23,7 +24,7 @@ const createCollectionSchema = Joi.object({
 // Create/log a new collection
 router.post('/', auth, validate(createCollectionSchema), async (req, res) => {
   try {
-    const { collectionPointId, wasteType, weight, photoUrl, notes, location } = req.body;
+    const { collectionPointId, wasteType, weight, photoUrl, notes, location, manualPointName } = req.body;
     const bmcCollectorId = req.user.id;
 
     // Verify user is a BMC collector
@@ -32,35 +33,47 @@ router.post('/', auth, validate(createCollectionSchema), async (req, res) => {
       return res.status(403).json({ success: false, message: 'Only BMC collectors can log collections' });
     }
 
-    // Verify collection point exists and is assigned to this collector
-    const collectionPoint = await CollectionPoint.findById(collectionPointId);
-    if (!collectionPoint) {
-      return res.status(404).json({ success: false, message: 'Collection point not found' });
-    }
+    let pointToLog = collectionPointId;
 
-    if (collectionPoint.assignedCollectorId && collectionPoint.assignedCollectorId.toString() !== bmcCollectorId) {
-      return res.status(403).json({ success: false, message: 'This collection point is not assigned to you' });
+    // If manual entry, validate manual point name is provided
+    if (!collectionPointId || collectionPointId === '') {
+      if (!manualPointName) {
+        return res.status(400).json({ success: false, message: 'Please provide collection point name' });
+      }
+      // For manual entries, we'll store the name in notes
+    } else {
+      // Verify collection point exists and is assigned to this collector
+      const collectionPoint = await CollectionPoint.findById(collectionPointId);
+      if (!collectionPoint) {
+        return res.status(404).json({ success: false, message: 'Collection point not found' });
+      }
+
+      if (collectionPoint.assignedCollectorId && collectionPoint.assignedCollectorId.toString() !== bmcCollectorId) {
+        return res.status(403).json({ success: false, message: 'This collection point is not assigned to you' });
+      }
     }
 
     // Create the bulk collection record
     const bulkCollection = new BulkCollection({
       bmcCollectorId,
-      collectionPointId,
+      collectionPointId: collectionPointId || null,
       wasteType,
       weight,
       photoUrl: photoUrl || null,
       wardId: user.wardId,
-      notes,
+      notes: manualPointName ? `[Manual: ${manualPointName}] ${notes}` : notes,
       location: location || null,
       timestamp: new Date()
     });
 
     await bulkCollection.save();
 
-    // Update collection point's lastCollectionAt
-    await CollectionPoint.findByIdAndUpdate(collectionPointId, {
-      lastCollectionAt: new Date()
-    });
+    // Update collection point's lastCollectionAt if it's not a manual entry
+    if (collectionPointId && collectionPointId !== '') {
+      await CollectionPoint.findByIdAndUpdate(collectionPointId, {
+        lastCollectionAt: new Date()
+      });
+    }
 
     res.status(201).json({
       success: true,
