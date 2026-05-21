@@ -21,7 +21,7 @@ export default function HomeScreen() {
   const [collectorStats, setCollectorStats] = React.useState(null);
 
   useEffect(() => {
-    if (user?.role !== 'collector') {
+    if (user?.role === 'citizen') {
       refresh();
     }
     if (user?.role === 'collector') {

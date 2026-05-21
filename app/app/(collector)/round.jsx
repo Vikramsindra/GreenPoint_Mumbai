@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import * as api from '../../services/api';
 import HouseholdCard from '../../components/HouseholdCard';
@@ -41,9 +41,11 @@ export default function RoundScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchRoundData();
-  }, [fetchRoundData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchRoundData();
+    }, [fetchRoundData])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -61,6 +63,39 @@ export default function RoundScreen() {
     // Here we just use scanned today for simplicity
     if (isScannedToday(hh)) return 'scanned';
     return 'unscanned';
+  };
+
+  const [addCitizenModalVisible, setAddCitizenModalVisible] = useState(false);
+  const [newCitizenName, setNewCitizenName] = useState('');
+  const [newCitizenPhone, setNewCitizenPhone] = useState('');
+  const [addingCitizen, setAddingCitizen] = useState(false);
+
+  const handleAddCitizenSubmit = async () => {
+    if (!newCitizenName || !newCitizenPhone) {
+      alert('Name and phone are required');
+      return;
+    }
+    setAddingCitizen(true);
+    try {
+      // Use api.register directly instead of store to avoid logging the collector out
+      const res = await api.register({
+        name: newCitizenName,
+        phone: newCitizenPhone,
+        password: 'password123', // default password
+        role: 'citizen'
+      });
+      if (res.success) {
+        alert('Citizen added successfully!');
+        setAddCitizenModalVisible(false);
+        setNewCitizenName('');
+        setNewCitizenPhone('');
+        fetchRoundData(); // Refresh the list
+      }
+    } catch (err) {
+      alert('Failed to add citizen. Phone number may already exist.');
+    } finally {
+      setAddingCitizen(false);
+    }
   };
 
   const filteredHouseholds = households.filter(hh => {
@@ -91,9 +126,6 @@ export default function RoundScreen() {
   const confirmViolation = async () => {
     if (!selectedHousehold || !violationType) return;
     try {
-      // In a full implementation we'd call the api.logViolation endpoint
-      // and pass { citizenId: selectedHousehold.citizenId._id, type: violationType }
-      // For this prototype, we'll just mock success and refresh
       alert(`Violation ${violationType} logged for ${selectedHousehold.citizenId.name}`);
       setViolationModalVisible(false);
       fetchRoundData();
@@ -138,15 +170,23 @@ export default function RoundScreen() {
           </View>
         </View>
 
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={24} color="#9ca3af" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search address or citizen..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+        {/* Search and Add Action */}
+        <View style={{ flexDirection: 'row', margin: 16, gap: 10 }}>
+          <View style={[styles.searchContainer, { flex: 1, margin: 0 }]}>
+            <MaterialCommunityIcons name="magnify" size={24} color="#9ca3af" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search address or citizen..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          <TouchableOpacity 
+            style={{ backgroundColor: '#16a34a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, borderRadius: 8 }}
+            onPress={() => setAddCitizenModalVisible(true)}
+          >
+            <MaterialCommunityIcons name="account-plus" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         {/* List */}
@@ -215,6 +255,52 @@ export default function RoundScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Add Citizen Modal */}
+      <Modal visible={addCitizenModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add New Citizen</Text>
+            <Text style={{fontSize: 14, color: '#6b7280', marginBottom: 16}}>
+              Register a citizen and add them to your ward.
+            </Text>
+            
+            <Text style={styles.typeLabel}>Citizen Name</Text>
+            <TextInput
+              style={{ paddingVertical: 12, paddingHorizontal: 12, fontSize: 15, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, marginBottom: 16, backgroundColor: '#f9fafb', color: '#1f2937' }}
+              placeholder="E.g. Rajesh Kumar"
+              placeholderTextColor="#9ca3af"
+              value={newCitizenName}
+              onChangeText={setNewCitizenName}
+            />
+
+            <Text style={styles.typeLabel}>Phone Number</Text>
+            <TextInput
+              style={{ paddingVertical: 12, paddingHorizontal: 12, fontSize: 15, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, marginBottom: 24, backgroundColor: '#f9fafb', color: '#1f2937' }}
+              placeholder="10-digit mobile number"
+              placeholderTextColor="#9ca3af"
+              keyboardType="numeric"
+              value={newCitizenPhone}
+              onChangeText={setNewCitizenPhone}
+              maxLength={10}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setAddCitizenModalVisible(false)} disabled={addingCitizen}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalConfirm, {backgroundColor: '#16a34a'}, (!newCitizenName || !newCitizenPhone || addingCitizen) && styles.modalConfirmDisabled]} 
+                onPress={handleAddCitizenSubmit}
+                disabled={!newCitizenName || !newCitizenPhone || addingCitizen}
+              >
+                <Text style={styles.modalConfirmText}>{addingCitizen ? 'Adding...' : 'Add Citizen'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
