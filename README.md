@@ -1,5 +1,8 @@
 # GreenPoint BMC Collector Dashboard - Project README
 
+For the verified Expo Go and Windows startup workflow, see
+[MOBILE_SETUP.md](MOBILE_SETUP.md).
+
 ## 🎯 Executive Summary
 
 **GreenPoint** is a comprehensive waste management platform designed to empower BMC (Brihan Mumbai Corporation) collectors with a **real-time, dynamic mobile dashboard** for tracking and managing household waste collection across Mumbai's residential societies.
@@ -235,9 +238,9 @@ Backup:           Configured
 #### Network
 
 ```
-Current IP:       10.147.22.121
+Current IP:       Set your computer LAN IPv4 in app/.env.local
 Port:             5000
-API Base URL:     http://10.147.22.121:5000/api
+API Base URL:     EXPO_PUBLIC_API_URL=http://<computer-lan-ip>:5000/api
 Protocol:         HTTP (HTTPS in production)
 ```
 
@@ -541,9 +544,9 @@ Password: password123
 ### Current Environment
 
 ```
-Server:   10.147.22.121:5000
+Server:   0.0.0.0:5000 (reachable through the computer LAN IPv4)
 Database: localhost:27017 (MongoDB)
-API:      http://10.147.22.121:5000/api
+API:      http://<computer-lan-ip>:5000/api
 Status:   Development Ready
 ```
 

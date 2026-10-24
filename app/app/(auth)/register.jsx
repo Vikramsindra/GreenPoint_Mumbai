@@ -83,7 +83,7 @@ export default function RegisterScreen() {
       }
 
       await register(registerData);
-      router.replace("/(tabs)/home");
+      // RootLayout routes the authenticated user to the selected role flow.
     } catch (e) {
       setErrors({ form: e.message || "Registration failed" });
     }

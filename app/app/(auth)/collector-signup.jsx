@@ -73,7 +73,7 @@ export default function CollectorSignupScreen() {
         password: form.password,
         role: "collector",
       });
-      router.replace("/(tabs)/home");
+      // RootLayout routes collectors to their round after registration.
     } catch (e) {
       setErrors({ form: e.message || "Registration failed" });
     }

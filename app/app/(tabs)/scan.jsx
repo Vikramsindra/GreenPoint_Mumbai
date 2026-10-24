@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Image, Linking, Modal, TextInput, Switch, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Camera, CameraView } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 import { usePointsStore } from '../../store/pointsStore';
 import { useAuthStore } from '../../store/authStore';
@@ -18,7 +18,7 @@ export default function ScanScreen() {
   const { openMenu } = useUiStore();
   const isCitizen = user?.role === 'citizen' || !user?.role;
 
-  const [hasPermission, setHasPermission] = useState(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [selectedAction, setSelectedAction] = useState('SEGREGATION');
   const [overlayState, setOverlayState] = useState(false);
@@ -38,16 +38,6 @@ export default function ScanScreen() {
     { id: 'COMPOSTING', label: 'Composting +20pts' },
     { id: 'RECYCLABLE_DROP', label: 'Recyclable +5pts' }
   ];
-
-  useEffect(() => {
-    if (!isCitizen) {
-      const getPermissions = async () => {
-        const { status } = await Camera.requestCameraPermissionsAsync();
-        setHasPermission(status === 'granted');
-      };
-      getPermissions();
-    }
-  }, [isCitizen]);
 
   const handleScan = async (data) => {
     if (scanned || overlayState || formModalVisible) return;
@@ -189,15 +179,15 @@ export default function ScanScreen() {
   // -----------------------------------------
   // COLLECTOR VIEW: Show Camera Scanner
   // -----------------------------------------
-  if (hasPermission === null) {
+  if (!cameraPermission) {
     return <View style={styles.container} />;
   }
-  if (hasPermission === false) {
+  if (!cameraPermission.granted) {
     return (
       <View style={styles.permissionContainer}>
         <Text style={{ fontSize: 48, marginBottom: 16 }}>📷</Text>
         <Text style={{ fontSize: 16, marginBottom: 16 }}>Camera permission required</Text>
-        <TouchableOpacity style={styles.permissionBtn} onPress={() => Camera.requestCameraPermissionsAsync().then(r => setHasPermission(r.status === 'granted'))}>
+        <TouchableOpacity style={styles.permissionBtn} onPress={requestCameraPermission}>
           <Text style={{ color: '#fff', fontWeight: 'bold' }}>Grant Permission</Text>
         </TouchableOpacity>
       </View>

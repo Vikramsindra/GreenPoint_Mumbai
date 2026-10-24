@@ -42,8 +42,13 @@ export default function CollectorScanScreen() {
 
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPerm(status === 'granted');
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        setLocationPerm(status === 'granted');
+      } catch (error) {
+        console.warn('Unable to request location permission:', error.message);
+        setLocationPerm(false);
+      }
     })();
   }, []);
 

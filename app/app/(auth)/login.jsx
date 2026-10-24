@@ -33,7 +33,8 @@ export default function LoginScreen() {
     
     try {
       await login(phone, password);
-      router.replace('/(tabs)/home');
+      // RootLayout observes the authenticated user and selects the matching
+      // citizen, collector, or BMC collector route.
     } catch (e) {
       // Error is handled in store
     }

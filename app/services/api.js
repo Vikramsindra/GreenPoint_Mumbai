@@ -2,13 +2,21 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Note: Use your local IP for physical device testing
-const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://10.147.22.121:5000/api';
+const configuredBaseURL = process.env.EXPO_PUBLIC_API_URL?.trim();
+const baseURL = configuredBaseURL || 'http://127.0.0.1:5000/api';
+
+if (!configuredBaseURL) {
+  console.warn(
+    'EXPO_PUBLIC_API_URL is not set. The localhost fallback only works on the development machine; ' +
+    'set it to the computer LAN address when using Expo Go on a phone.',
+  );
+}
 
 console.log('🌐 API Base URL:', baseURL);
 
 const api = axios.create({
   baseURL,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -23,7 +31,8 @@ api.interceptors.request.use(async (config) => {
 }, (error) => Promise.reject(error));
 
 api.interceptors.response.use((response) => response, async (error) => {
-  if (error.response?.status === 401 && !error.config.url.includes('/auth/login') && !error.config.url.includes('/auth/register')) {
+  const requestURL = error.config?.url || '';
+  if (error.response?.status === 401 && !requestURL.includes('/auth/login') && !requestURL.includes('/auth/register')) {
     const { useAuthStore } = require('../store/authStore');
     const logout = useAuthStore.getState().logout;
     logout();

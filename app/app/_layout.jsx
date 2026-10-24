@@ -2,44 +2,29 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { PaperProvider } from "react-native-paper";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuthStore } from "../store/authStore";
 import { COLORS } from "../constants/theme";
 import SideMenu from "../components/SideMenu";
 
 export default function RootLayout() {
-  const { token, user, isLoading, loadStoredAuth, logout } = useAuthStore();
+  const { token, user, loadStoredAuth } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
 
-  // Clear token on app startup for development/testing
-  useEffect(() => {
-    const clearToken = async () => {
-      await AsyncStorage.removeItem('gp_token');
-      await logout();
-    };
-    clearToken();
-  }, []);
-
-  // Load stored auth with a timeout so the app never gets stuck
+  // Restore the saved session before deciding which role flow to show.
   useEffect(() => {
     const init = async () => {
       try {
-        await Promise.race([
-          loadStoredAuth(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), 5000),
-          ),
-        ]);
+        await loadStoredAuth();
       } catch (e) {
-        // If API is down or times out, continue anyway — token may still be in persisted store
-        console.log("Auth init timeout or error, continuing...", e.message);
+        console.log("Unable to restore the saved session:", e.message);
+      } finally {
+        setIsReady(true);
       }
-      setIsReady(true);
     };
     init();
-  }, []);
+  }, [loadStoredAuth]);
 
   // Handle navigation safely once ready
   useEffect(() => {
@@ -59,13 +44,14 @@ export default function RootLayout() {
         router.replace("/(tabs)/home");
       }
     } else if (token && !inAuthGroup) {
-      // User is already logged in but on wrong page - ensure correct routing
+      // Keep each operational role inside its own route group. Citizen-only
+      // shared screens live at the root and are intentionally allowed.
       const currentPage = segments[0];
       if (user?.role === "collector" && currentPage !== "(collector)") {
         router.replace("/(collector)/round");
       } else if (user?.role === "bmc_collector" && currentPage !== "(bmc-collector)") {
         router.replace("/(bmc-collector)/dashboard");
-      } else if (user?.role === "citizen" && currentPage !== "(tabs)") {
+      } else if (user?.role === "citizen" && !["(tabs)", "leaderboard", "profile", "rewards-history"].includes(currentPage)) {
         router.replace("/(tabs)/home");
       }
     }
