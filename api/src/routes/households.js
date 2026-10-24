@@ -1,11 +1,13 @@
 // filepath: api/src/routes/households.js
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Joi = require('joi');
 const Household = require('../models/Household');
 const User = require('../models/User');
 const Society = require('../models/Society');
 const SocietyMembership = require('../models/SocietyMembership');
+const HouseholdInspection = require('../models/HouseholdInspection');
 const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { generateQRCodeString, generateQRCodeImage, generateQRCodeBuffer } = require('../utils/qrGenerator');
@@ -176,6 +178,103 @@ router.get('/society', auth, requireRole('collector'), async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: 'Fetch failed: ' + err.message });
+  }
+});
+
+// Get own household inspection history (citizen only)
+router.get('/my-inspections', auth, requireRole('citizen'), async (req, res) => {
+  try {
+    const household = await Household.findOne({ citizenId: req.user.id });
+    if (!household) {
+      return res.json({
+        success: true,
+        data: { inspections: [] },
+        message: 'No household registered yet.'
+      });
+    }
+
+    const inspections = await HouseholdInspection.find({ householdId: household._id })
+      .populate('collectorId', 'name')
+      .populate('societyId', 'name')
+      .sort({ inspectedAt: -1 })
+      .limit(50);
+
+    res.json({
+      success: true,
+      data: {
+        inspections,
+        householdAddress: household.address,
+        householdQrCode: household.qrCode,
+        policyNote: 'Household records show participation; BMC-verified society handovers earn society points.'
+      },
+      message: 'Household inspection history fetched'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch inspections: ' + err.message });
+  }
+});
+
+// Resolve household by ID or QR code for internal collector
+router.get('/resolve/:idOrQr', auth, requireRole('collector'), async (req, res) => {
+  try {
+    const { idOrQr } = req.params;
+    const collector = await User.findById(req.user.id);
+    if (!collector || !collector.assignedSocietyId) {
+      return res.status(403).json({ success: false, message: 'Collector not assigned to any approved society' });
+    }
+
+    let household;
+    if (mongoose.Types.ObjectId.isValid(idOrQr)) {
+      household = await Household.findOne({ _id: idOrQr, isActive: true })
+        .populate('citizenId', 'name phone')
+        .populate('societyRef', 'name address wardId');
+    }
+    if (!household) {
+      household = await Household.findOne({ qrCode: idOrQr, isActive: true })
+        .populate('citizenId', 'name phone')
+        .populate('societyRef', 'name address wardId');
+    }
+
+    if (!household) {
+      return res.status(404).json({ success: false, message: 'Household not found or inactive' });
+    }
+
+    // Verify household belongs to collector's assigned society
+    const approvedMembership = await SocietyMembership.findOne({
+      societyId: collector.assignedSocietyId,
+      status: 'APPROVED',
+      $or: [
+        { householdId: household._id },
+        { citizenId: household.citizenId?._id }
+      ]
+    });
+
+    if (!approvedMembership) {
+      return res.status(403).json({
+        success: false,
+        message: 'Household does not belong to your assigned housing society'
+      });
+    }
+
+    const society = await Society.findById(collector.assignedSocietyId).select('name');
+
+    res.json({
+      success: true,
+      data: {
+        household: {
+          _id: household._id,
+          address: household.address,
+          qrCode: household.qrCode,
+          citizenName: household.citizenId?.name || 'Unknown',
+          citizenPhone: household.citizenId?.phone || '',
+          societyName: society?.name || 'Assigned Society',
+          societyId: collector.assignedSocietyId
+        }
+      },
+      message: 'Household resolved'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Resolve failed: ' + err.message });
   }
 });
 

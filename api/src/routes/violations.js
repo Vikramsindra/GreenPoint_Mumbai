@@ -67,10 +67,12 @@ router.post('/log', auth, requireRole('collector'), validate(logSchema), async (
       });
     }
 
-    const loc = location || { lat: 19.0728, lng: 72.8826 };
-    const result = await penaltyEngine.logViolation(citizenId, req.user.id, type, loc);
-    
-    res.status(201).json({ success: true, data: result.violation, message: result.message });
+    // Automated monetary fines and point penalties are disabled for the society pilot.
+    // Observations must be recorded via structured HouseholdInspection instead.
+    return res.status(403).json({
+      success: false,
+      message: 'Automated violation fines and penalty deductions are disabled during the BMC Society pilot. Please record household observations (Mixed waste / No handover) through the daily household inspection workflow.'
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to log violation: ' + error.message });
   }

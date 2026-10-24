@@ -19,17 +19,31 @@ export default function HomeScreen() {
   const { openMenu } = useUiStore();
   
   const [collectorStats, setCollectorStats] = React.useState(null);
+  const [myInspections, setMyInspections] = React.useState([]);
+
+  const loadCitizenInspections = React.useCallback(() => {
+    if (user?.role === 'citizen') {
+      api.getMyHouseholdInspections()
+        .then(res => {
+          if (res.data?.success && res.data?.data?.inspections) {
+            setMyInspections(res.data.data.inspections);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user?.role !== 'collector') {
       refresh();
+      loadCitizenInspections();
     }
     if (user?.role === 'collector') {
       api.getCollectorStats()
         .then(res => { if (res.data?.success) setCollectorStats(res.data.data); })
         .catch(err => console.log('Failed to fetch collector stats', err));
     }
-  }, [user]);
+  }, [user, loadCitizenInspections]);
 
   const fillRatio = Math.min(balance / 500, 1);
   
@@ -113,7 +127,7 @@ export default function HomeScreen() {
       ) : (
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} tintColor={COLORS.primary} />}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { refresh(); loadCitizenInspections(); }} tintColor={COLORS.primary} />}
         showsVerticalScrollIndicator={false}
       >
         {/* Floating Gradient Card */}
@@ -176,11 +190,11 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.metricsContainer}>
-            {/* Left Card - Green Score */}
+            {/* Left Card - Preserved Personal Points */}
             <View style={[styles.metricCard, { backgroundColor: '#f0f9ff' }]}> 
               <View style={styles.metricCardHeader}>
-                <Ionicons name="heart" size={16} color="#0ea5e9" />
-                <Text style={[styles.metricCardTitle, { color: '#0ea5e9' }]}> Green Score</Text>
+                <Ionicons name="wallet-outline" size={16} color="#0ea5e9" />
+                <Text style={[styles.metricCardTitle, { color: '#0ea5e9' }]}> Personal Points</Text>
               </View>
               
               <View style={styles.ringContainer}>
@@ -199,6 +213,7 @@ export default function HomeScreen() {
                 </Svg>
                 <View style={styles.ringCenter}>
                   <Text style={styles.scoreNumber}>{balance}</Text>
+                  <Text style={{ fontSize: 9, color: '#0369a1', fontWeight: '600', marginTop: 2 }}>Preserved</Text>
                 </View>
               </View>
             </View>
@@ -210,10 +225,9 @@ export default function HomeScreen() {
                 <Text style={[styles.metricCardTitle, { color: '#22c55e' }]}> Compliance</Text>
               </View>
               
-              <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.text, alignSelf: 'flex-start', marginLeft: 4, marginTop: 10 }}>Excellent!</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.text, alignSelf: 'flex-start', marginLeft: 4, marginTop: 10 }}>Active Pilot</Text>
               
               <View style={styles.chartContainer}>
-                {/* Mocked bar chart following screenshot style */}
                 <View style={{flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 4, height: 75, marginTop: 10}}>
                    <View style={{width: 8, height: 15, borderRadius: 4, backgroundColor: '#bbf7d0'}} />
                    <View style={{width: 8, height: 30, borderRadius: 4, backgroundColor: '#bbf7d0'}} />
@@ -234,6 +248,73 @@ export default function HomeScreen() {
              <View style={styles.dot} />
           </View>
         </View>
+
+        {/* Household Participation Records Section */}
+        {user?.role === 'citizen' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>Household Inspection Records</Text>
+                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                  BMC-verified society handovers earn society points. Household inspections record participation.
+                </Text>
+              </View>
+            </View>
+
+            {myInspections && myInspections.length > 0 ? (
+              myInspections.slice(0, 5).map((ins) => {
+                const isSeg = ins.outcome === 'SEGREGATED';
+                const isMix = ins.outcome === 'MIXED';
+                const badgeColor = isSeg ? '#16a34a' : isMix ? '#d97706' : '#4b5563';
+                const badgeBg = isSeg ? '#f0fdf4' : isMix ? '#fffbeb' : '#f8fafc';
+                const badgeLabel = isSeg ? '✓ Segregated' : isMix ? '⚠️ Mixed' : '🚪 No Handover';
+
+                return (
+                  <View key={ins._id} style={styles.trackerCard}>
+                    <View style={[styles.trackerIconBox, { backgroundColor: badgeBg }]}>
+                      <Ionicons 
+                        name={isSeg ? 'checkmark-circle' : isMix ? 'alert-circle' : 'door-outline'} 
+                        size={26} 
+                        color={badgeColor} 
+                      />
+                    </View>
+                    <View style={styles.trackerContent}>
+                      <Text style={[styles.trackerTitle, { color: badgeColor, fontWeight: '700' }]}>
+                        {badgeLabel}
+                      </Text>
+                      {ins.notes ? (
+                        <Text style={{ fontSize: 12, color: '#475569', marginTop: 2 }} numberOfLines={2}>
+                          "{ins.notes}"
+                        </Text>
+                      ) : null}
+                      <Text style={styles.trackerValue}>
+                        {new Date(ins.inspectedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(ins.inspectedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ fontSize: 11, color: '#16a34a', fontWeight: '600' }}>Participation</Text>
+                      <Text style={{ fontSize: 10, color: '#94a3b8' }}>Recorded</Text>
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={{ padding: 20, alignItems: 'center', backgroundColor: '#fff', borderRadius: RADIUS.xl, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                <Text style={{ fontSize: 28, marginBottom: 6 }}>🚪</Text>
+                <Text style={{ color: COLORS.text, fontWeight: '700' }}>No household inspections yet</Text>
+                <Text style={{ color: COLORS.textSecondary, fontSize: 12, marginTop: 2, textAlign: 'center' }}>
+                  Show your Household QR to your internal collector during daily society rounds.
+                </Text>
+                <TouchableOpacity 
+                  style={{ marginTop: 12, backgroundColor: '#16a34a', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
+                  onPress={() => router.push('/(tabs)/scan')}
+                >
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>View Household QR</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Tracker Section - Now Dynamic Recent Activity */}
         <View style={styles.section}>

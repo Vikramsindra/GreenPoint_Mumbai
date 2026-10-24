@@ -121,9 +121,26 @@ export const getMyHousehold = () => api.get('/households/my');
 export const getWardHouseholds = () => api.get('/households/ward');
 export const downloadQRCode = (id) => api.get(`/households/qr-image/${id}`, { responseType: 'blob' });
 
-// Collector scan
-export const collectorScan = (qrCode, location, note = '') =>
-  api.post('/points/collector-scan', { qrCode, location, note });
+// Collector scan & inspections
+export const collectorScan = (dataOrQr, maybeLocation, maybeNote) => {
+  let payload;
+  if (typeof dataOrQr === 'object' && dataOrQr !== null) {
+    payload = dataOrQr;
+  } else {
+    payload = {
+      qrCode: dataOrQr,
+      location: maybeLocation,
+      note: maybeNote,
+      outcome: 'SEGREGATED'
+    };
+  }
+  return api.post('/points/collector-scan', payload);
+};
+
+export const getCollectorHistory = () => api.get('/points/collector-history');
+export const resolveHousehold = (idOrQr) => api.get(`/households/resolve/${idOrQr}`);
+export const getMyHouseholdInspections = () => api.get('/households/my-inspections');
+export const getSocietyHouseholdInspections = () => api.get('/societies/my/household-inspections');
 
 // Collector stats
 export const getCollectorStats = () => api.get('/points/collector-stats');

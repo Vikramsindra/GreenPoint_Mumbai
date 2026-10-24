@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, RefreshControl, 
-  TextInput, TouchableOpacity, Modal 
+  TextInput, TouchableOpacity, ActivityIndicator 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,25 +16,44 @@ export default function RoundScreen() {
   const { user } = useAuthStore();
   
   const [households, setHouseholds] = useState([]);
-  const [stats, setStats] = useState({ scansToday: 0, violationsToday: 0 });
+  const [stats, setStats] = useState({
+    assignedHouseholds: 0,
+    inspectedToday: 0,
+    segregatedToday: 0,
+    mixedToday: 0,
+    noHandoverToday: 0,
+    remainingToday: 0
+  });
   const [assignedSociety, setAssignedSociety] = useState(null);
-  const [isAssigned, setIsAssigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const [violationModalVisible, setViolationModalVisible] = useState(false);
-  const [selectedHousehold, setSelectedHousehold] = useState(null);
-  const [violationType, setViolationType] = useState(null);
 
   const fetchRoundData = useCallback(async () => {
     try {
       const [hhRes, statsRes] = await Promise.all([
-        api.getWardHouseholds(),
-        api.getCollectorStats()
+        api.getWardHouseholds().catch(err => ({ data: { success: false, error: err.message } })),
+        api.getCollectorStats().catch(err => ({ data: { success: false, error: err.message } }))
       ]);
-      if (hhRes.data?.success) setHouseholds(hhRes.data.data.households);
-      if (statsRes.data?.success) setStats(statsRes.data.data);
+
+      if (hhRes.data?.success) {
+        setHouseholds(hhRes.data.data.households || []);
+        if (hhRes.data.data.society) {
+          setAssignedSociety(hhRes.data.data.society);
+        }
+      }
+
+      if (statsRes.data?.success) {
+        const s = statsRes.data.data;
+        setStats({
+          assignedHouseholds: s.assignedHouseholds ?? (hhRes.data?.data?.households?.length || 0),
+          inspectedToday: s.inspectedToday ?? s.scansToday ?? 0,
+          segregatedToday: s.segregatedToday ?? s.scansToday ?? 0,
+          mixedToday: s.mixedToday ?? 0,
+          noHandoverToday: s.noHandoverToday ?? 0,
+          remainingToday: s.remainingToday ?? Math.max(0, (hhRes.data?.data?.households?.length || 0) - (s.inspectedToday || 0))
+        });
+      }
     } catch (err) {
       console.error('Failed to fetch round data:', err);
     } finally {
@@ -59,10 +78,11 @@ export default function RoundScreen() {
   };
 
   const getScanStatus = (hh) => {
-    // In a real app we'd also check if a violation was logged today specifically
-    // Here we just use scanned today for simplicity
-    if (isScannedToday(hh)) return 'scanned';
-    return 'unscanned';
+    if (!isScannedToday(hh)) return 'unscanned';
+    if (hh.lastOutcome === 'MIXED') return 'mixed';
+    if (hh.lastOutcome === 'NO_HANDOVER') return 'no_handover';
+    if (hh.lastOutcome === 'SEGREGATED') return 'segregated';
+    return 'scanned';
   };
 
   const filteredHouseholds = households.filter(hh => {
@@ -81,30 +101,12 @@ export default function RoundScreen() {
   });
 
   const handleScanPress = (hh) => {
-    router.push({ pathname: '/(collector)/scan', params: { householdId: hh._id } });
+    router.push({ pathname: '/(collector)/scan', params: { householdId: hh._id, initialOutcome: 'SEGREGATED' } });
   };
 
-  const handleViolationPress = (hh) => {
-    setSelectedHousehold(hh);
-    setViolationType(null);
-    setViolationModalVisible(true);
+  const handleMixedPress = (hh) => {
+    router.push({ pathname: '/(collector)/scan', params: { householdId: hh._id, initialOutcome: 'MIXED' } });
   };
-
-  const confirmViolation = async () => {
-    if (!selectedHousehold || !violationType) return;
-    try {
-      // In a full implementation we'd call the api.logViolation endpoint
-      // and pass { citizenId: selectedHousehold.citizenId._id, type: violationType }
-      // For this prototype, we'll just mock success and refresh
-      alert(`Violation ${violationType} logged for ${selectedHousehold.citizenId.name}`);
-      setViolationModalVisible(false);
-      fetchRoundData();
-    } catch (err) {
-      alert('Failed to log violation');
-    }
-  };
-
-  const remaining = households.length - stats.scansToday - stats.violationsToday;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -118,133 +120,146 @@ export default function RoundScreen() {
             <TouchableOpacity onPress={() => router.replace('/(tabs)/home')} style={styles.backBtn}>
               <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Daily Round</Text>
+            <Text style={styles.headerTitle}>Daily Household Round</Text>
           </View>
-          <Text style={styles.headerDate}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</Text>
+          <Text style={styles.headerDate}>
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+          </Text>
           <Text style={styles.headerName}>Collector: {user?.name}</Text>
-          <Text style={styles.headerSocietyName}>{assignedSociety ? `🏢 Society: ${assignedSociety.name}` : '⚠️ No Society Assigned'}</Text>
+          <Text style={styles.headerSocietyName}>
+            {assignedSociety ? `🏢 Society: ${assignedSociety.name}` : '🏢 Assigned Housing Society Round'}
+          </Text>
         </View>
 
-        {/* Stats Row */}
-        <View style={styles.statsContainer}>
+        {/* Operational Stats Grid */}
+        <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={[styles.statValue, {color: '#16a34a'}]}>{stats.scansToday}</Text>
-            <Text style={styles.statLabel}>Scanned</Text>
+            <Text style={[styles.statValue, { color: '#0f172a' }]}>{stats.assignedHouseholds}</Text>
+            <Text style={styles.statLabel}>Assigned</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={[styles.statValue, {color: '#dc2626'}]}>{stats.violationsToday}</Text>
-            <Text style={styles.statLabel}>Violations</Text>
+            <Text style={[styles.statValue, { color: '#16a34a' }]}>{stats.inspectedToday}</Text>
+            <Text style={styles.statLabel}>Inspected</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={[styles.statValue, {color: '#6b7280'}]}>{remaining >= 0 ? remaining : 0}</Text>
+            <Text style={[styles.statValue, { color: '#2563eb' }]}>{stats.remainingToday}</Text>
             <Text style={styles.statLabel}>Remaining</Text>
           </View>
         </View>
 
+        <View style={[styles.statsGrid, { marginTop: 8 }]}>
+          <View style={[styles.statCardSmall, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+            <Text style={[styles.statValueSmall, { color: '#16a34a' }]}>{stats.segregatedToday}</Text>
+            <Text style={[styles.statLabelSmall, { color: '#15803d' }]}>✓ Segregated</Text>
+          </View>
+          <View style={[styles.statCardSmall, { backgroundColor: '#fffbeb', borderColor: '#fde68a' }]}>
+            <Text style={[styles.statValueSmall, { color: '#d97706' }]}>{stats.mixedToday}</Text>
+            <Text style={[styles.statLabelSmall, { color: '#b45309' }]}>⚠️ Mixed</Text>
+          </View>
+          <View style={[styles.statCardSmall, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}>
+            <Text style={[styles.statValueSmall, { color: '#4b5563' }]}>{stats.noHandoverToday}</Text>
+            <Text style={[styles.statLabelSmall, { color: '#374151' }]}>🚪 No Handover</Text>
+          </View>
+        </View>
+
+        {/* Info Banner */}
+        <View style={styles.infoBanner}>
+          <MaterialCommunityIcons name="information" size={18} color="#1e40af" />
+          <Text style={styles.infoBannerText}>
+            Select a household to record today's handover outcome. Mixed waste requires an explanatory note. No personal points or fines are issued.
+          </Text>
+        </View>
+
         {/* Search */}
         <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={24} color="#9ca3af" />
+          <MaterialCommunityIcons name="magnify" size={22} color="#9ca3af" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search address or citizen..."
+            placeholder="Search household address or resident..."
+            placeholderTextColor="#9ca3af"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialCommunityIcons name="close-circle" size={18} color="#9ca3af" />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        {/* List */}
+        {/* List of Households */}
         <View style={styles.listContainer}>
-          {sortedHouseholds.map(hh => (
-            <HouseholdCard 
-              key={hh._id} 
-              household={hh} 
-              scanStatus={getScanStatus(hh)}
-              onScanPress={handleScanPress}
-              onViolationPress={handleViolationPress}
-            />
-          ))}
-          {sortedHouseholds.length === 0 && !loading && (
-            <Text style={styles.emptyText}>No households found in your ward.</Text>
+          {loading ? (
+            <ActivityIndicator size="large" color="#16a34a" style={{ marginTop: 24 }} />
+          ) : sortedHouseholds.length > 0 ? (
+            sortedHouseholds.map(hh => (
+              <HouseholdCard 
+                key={hh._id} 
+                household={hh} 
+                scanStatus={getScanStatus(hh)}
+                onScanPress={handleScanPress}
+                onMixedPress={handleMixedPress}
+              />
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="home-search-outline" size={48} color="#9ca3af" />
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'No matching households found' : 'No approved member households found in assigned society'}
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>
-
-      {/* Violation Modal */}
-      <Modal visible={violationModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Log Violation</Text>
-            {selectedHousehold && (
-              <View style={styles.modalHhInfo}>
-                <Text style={styles.modalCitizenName}>{selectedHousehold.citizenId.name}</Text>
-                <Text style={styles.modalAddress}>{selectedHousehold.address}</Text>
-              </View>
-            )}
-
-            <Text style={styles.typeLabel}>Select Violation Type:</Text>
-            <View style={styles.typeGrid}>
-              {[
-                { id: 'NON_SEGREGATION', name: 'Non-Segregation', sub: 'Mixed wet/dry', icon: 'trash-can-outline' },
-                { id: 'LITTERING', name: 'Littering', sub: 'Waste thrown outside', icon: 'delete-empty' },
-                { id: 'BURNING', name: 'Burning', sub: 'Burning waste', icon: 'fire' },
-                { id: 'BULK_VIOLATION', name: 'Bulk Violation', sub: '>100kg unauthorized', icon: 'weight-kilogram' },
-              ].map(type => (
-                <TouchableOpacity 
-                  key={type.id} 
-                  style={[styles.typeBtn, violationType === type.id && styles.typeBtnSelected]}
-                  onPress={() => setViolationType(type.id)}
-                >
-                  <MaterialCommunityIcons name={type.icon} size={24} color={violationType === type.id ? '#dc2626' : '#6b7280'} />
-                  <Text style={[styles.typeName, violationType === type.id && styles.typeNameSelected]}>{type.name}</Text>
-                  <Text style={styles.typeSub}>{type.sub}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.gpsNote}>Location will be recorded automatically</Text>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setViolationModalVisible(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalConfirm, !violationType && styles.modalConfirmDisabled]} 
-                onPress={confirmViolation}
-                disabled={!violationType}
-              >
-                <Text style={styles.modalConfirmText}>Confirm & Log</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: '#f8fafc' },
   header: {
     backgroundColor: '#16a34a',
-    padding: 20,
-    paddingBottom: 40,
+    padding: 16,
+    paddingTop: 8,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    marginBottom: 4,
   },
   backBtn: {
     padding: 4,
   },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  headerDate: { color: '#fff', fontSize: 14, marginTop: 4, opacity: 0.9 },
-  headerName: { color: '#fff', fontSize: 13, marginTop: 8, opacity: 0.8 },
-  statsContainer: {
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  headerDate: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
+  },
+  headerName: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  headerSocietyName: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+
+  // Stats
+  statsGrid: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginTop: -20,
-    gap: 12,
+    gap: 10,
+    marginTop: 12,
   },
   statCard: {
     flex: 1,
@@ -252,121 +267,88 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 1,
   },
-  statValue: { fontSize: 24, fontWeight: 'bold' },
-  statLabel: { fontSize: 12, color: '#6b7280', marginTop: 4 },
+  statValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  statCardSmall: {
+    flex: 1,
+    borderRadius: 10,
+    padding: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  statValueSmall: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  statLabelSmall: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eff6ff',
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  infoBannerText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#1e40af',
+    lineHeight: 16,
+  },
+
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    margin: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, fontSize: 15 },
-  listContainer: { paddingHorizontal: 16 },
-  emptyText: { textAlign: 'center', color: '#6b7280', marginTop: 20 },
-  
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '90%',
-  },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16 },
-  modalHhInfo: {
-    backgroundColor: '#f3f4f6',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  modalCitizenName: { fontSize: 16, fontWeight: 'bold' },
-  modalAddress: { fontSize: 13, color: '#4b5563', marginTop: 4 },
-  typeLabel: { fontSize: 14, fontWeight: '600', marginBottom: 12 },
-  typeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
-  },
-  typeBtn: {
-    width: '48%',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
-  typeBtnSelected: {
-    borderColor: '#dc2626',
-    backgroundColor: '#fef2f2',
-  },
-  typeName: { fontSize: 14, fontWeight: '600', marginTop: 8, color: '#4b5563' },
-  typeNameSelected: { color: '#dc2626' },
-  typeSub: { fontSize: 11, color: '#9ca3af', marginTop: 2, textAlign: 'center' },
-  gpsNote: { fontSize: 12, color: '#6b7280', textAlign: 'center', marginBottom: 20, fontStyle: 'italic' },
-  modalActions: { flexDirection: 'row', gap: 12 },
-  modalCancel: {
-    flex: 1, padding: 14, borderRadius: 8, borderWidth: 1, borderColor: '#d1d5db', alignItems: 'center'
-  },
-  modalConfirm: {
-    flex: 1, padding: 14, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center'
-  },
-  modalConfirmDisabled: { opacity: 0.5 },
-  modalCancelText: { fontSize: 16, fontWeight: '600', color: '#4b5563' },
-  modalConfirmText: { fontSize: 16, fontWeight: '600', color: '#fff' },
-
-  headerSocietyName: {
-    color: '#BBF7D0',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  unassignedCard: {
-    backgroundColor: '#FFFBEB',
-    margin: 16,
-    padding: 24,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    alignItems: 'center',
-  },
-  unassignedTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#92400E',
-    marginBottom: 8,
-  },
-  unassignedBody: {
-    fontSize: 13,
-    color: '#78350F',
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  unassignedRefreshBtn: {
-    backgroundColor: '#D97706',
-    paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    gap: 8,
   },
-  unassignedRefreshBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1e293b',
+    padding: 0,
   },
 
+  listContainer: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 8,
+    textAlign: 'center',
+  },
 });

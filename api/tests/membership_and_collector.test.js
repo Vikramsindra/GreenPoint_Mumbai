@@ -588,7 +588,7 @@ describe('Task 2: Society Membership and Internal Collector Assignment', () => {
     });
     assert.strictEqual(scanSuccess.status, 200);
     assert.strictEqual(scanSuccess.data.success, true);
-    assert.match(scanSuccess.data.message, /Segregation verified/i);
+    assert.match(scanSuccess.data.message, /Participation recorded|Segregation verified/i);
 
     // Attempt scan of household in different society -> 403 Forbidden
     const scanForbidden = await apiRequest('/points/collector-scan', {

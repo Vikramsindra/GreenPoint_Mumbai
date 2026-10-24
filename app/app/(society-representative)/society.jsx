@@ -30,6 +30,7 @@ import {
   redeemSocietyReward,
   getMySocietyVouchers,
   getSocietyTransactions,
+  getSocietyHouseholdInspections,
 } from "../../services/api";
 import { COLORS, SPACING, SHADOW } from "../../constants/theme";
 
@@ -106,6 +107,24 @@ export default function SocietyRepresentativeDashboard() {
   const [receiptModal, setReceiptModal] = useState({ visible: false, voucher: null });
   const [redemptionError, setRedemptionError] = useState(null);
 
+  // Task 6: Today's Household Participation state
+  const [householdParticipation, setHouseholdParticipation] = useState(null);
+  const [isLoadingParticipation, setIsLoadingParticipation] = useState(false);
+
+  const loadParticipation = useCallback(async () => {
+    setIsLoadingParticipation(true);
+    try {
+      const res = await getSocietyHouseholdInspections();
+      if (res.data?.success) {
+        setHouseholdParticipation(res.data.data);
+      }
+    } catch (err) {
+      console.log("Failed to load household participation:", err.message);
+    } finally {
+      setIsLoadingParticipation(false);
+    }
+  }, []);
+
   const loadRewardsAndVouchers = useCallback(async () => {
     setIsLoadingRewards(true);
     try {
@@ -176,6 +195,7 @@ export default function SocietyRepresentativeDashboard() {
           loadMembers();
           loadHandovers();
           loadRewardsAndVouchers();
+          loadParticipation();
         }
       } else {
         setSociety(null);
@@ -191,7 +211,7 @@ export default function SocietyRepresentativeDashboard() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [loadMembers, loadHandovers, loadRewardsAndVouchers]);
+  }, [loadMembers, loadHandovers, loadRewardsAndVouchers, loadParticipation]);
 
   const loadQr = async (societyId) => {
     setIsLoadingQr(true);
@@ -300,6 +320,7 @@ export default function SocietyRepresentativeDashboard() {
     setIsRefreshing(true);
     loadSociety();
     loadRewardsAndVouchers();
+    loadParticipation();
   };
 
   const handleOpenConfirmRedeem = (reward) => {
@@ -749,6 +770,121 @@ export default function SocietyRepresentativeDashboard() {
                 <Text style={styles.walletSubtitle}>
                   Earned via verified municipal segregated waste handovers (10 pts/day max). Points belong directly to the society.
                 </Text>
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 6: TODAY'S HOUSEHOLD PARTICIPATION                  */}
+              {/* -------------------------------------------------------- */}
+              <View style={[styles.card, styles.participationCard]}>
+                <View style={styles.participationHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionHeaderTitle}>Today's Household Participation</Text>
+                    <Text style={styles.sectionHeaderSubtitle}>
+                      Internal household observations recorded by your assigned collector today.
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={loadParticipation} style={styles.handoversRefreshBtn}>
+                    <Text style={styles.handoversRefreshBtnText}>
+                      {isLoadingParticipation ? "..." : "🔄 Refresh"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Important Distinction Banner */}
+                <View style={styles.distinctionBanner}>
+                  <Text style={styles.distinctionBannerText}>
+                    ℹ️ Internal household inspections record daily participation only. Only eligible BMC municipal society pickups earn redeemable society reward points.
+                  </Text>
+                </View>
+
+                {/* Operational Counts Grid */}
+                <View style={styles.participationStatsGrid}>
+                  <View style={styles.pStatItem}>
+                    <Text style={[styles.pStatValue, { color: '#0f172a' }]}>
+                      {householdParticipation?.stats?.totalAssigned ?? 0}
+                    </Text>
+                    <Text style={styles.pStatLabel}>Assigned</Text>
+                  </View>
+                  <View style={styles.pStatItem}>
+                    <Text style={[styles.pStatValue, { color: '#16a34a' }]}>
+                      {householdParticipation?.stats?.inspectedToday ?? 0}
+                    </Text>
+                    <Text style={styles.pStatLabel}>Inspected</Text>
+                  </View>
+                  <View style={styles.pStatItem}>
+                    <Text style={[styles.pStatValue, { color: '#2563eb' }]}>
+                      {householdParticipation?.stats?.remainingToday ?? 0}
+                    </Text>
+                    <Text style={styles.pStatLabel}>Remaining</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.participationStatsGrid, { marginTop: 8 }]}>
+                  <View style={[styles.pStatItemSmall, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                    <Text style={[styles.pStatValueSmall, { color: '#16a34a' }]}>
+                      {householdParticipation?.stats?.segregatedToday ?? 0}
+                    </Text>
+                    <Text style={[styles.pStatLabelSmall, { color: '#15803d' }]}>✓ Segregated</Text>
+                  </View>
+                  <View style={[styles.pStatItemSmall, { backgroundColor: '#fffbeb', borderColor: '#fde68a' }]}>
+                    <Text style={[styles.pStatValueSmall, { color: '#d97706' }]}>
+                      {householdParticipation?.stats?.mixedToday ?? 0}
+                    </Text>
+                    <Text style={[styles.pStatLabelSmall, { color: '#b45309' }]}>⚠️ Mixed</Text>
+                  </View>
+                  <View style={[styles.pStatItemSmall, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}>
+                    <Text style={[styles.pStatValueSmall, { color: '#4b5563' }]}>
+                      {householdParticipation?.stats?.noHandoverToday ?? 0}
+                    </Text>
+                    <Text style={[styles.pStatLabelSmall, { color: '#374151' }]}>🚪 No Handover</Text>
+                  </View>
+                </View>
+
+                {/* Recent Household Outcomes List */}
+                <Text style={styles.participationListTitle}>Recent Household Outcomes</Text>
+                {isLoadingParticipation && !householdParticipation ? (
+                  <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 12 }} />
+                ) : householdParticipation?.inspections && householdParticipation.inspections.length > 0 ? (
+                  <View style={styles.participationList}>
+                    {householdParticipation.inspections.map((ins) => {
+                      const isSeg = ins.outcome === 'SEGREGATED';
+                      const isMix = ins.outcome === 'MIXED';
+                      const badgeBg = isSeg ? '#dcfce7' : isMix ? '#fef3c7' : '#f1f5f9';
+                      const badgeColor = isSeg ? '#166534' : isMix ? '#92400e' : '#475569';
+                      const badgeLabel = isSeg ? '✓ Segregated' : isMix ? '⚠️ Mixed' : '🚪 No Handover';
+
+                      return (
+                        <View key={ins._id} style={styles.pInspectionCard}>
+                          <View style={styles.pCardTop}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.pHouseholdAddress}>{ins.householdId?.address || 'Household'}</Text>
+                              <Text style={styles.pCitizenName}>{ins.citizenId?.name || 'Resident'}</Text>
+                            </View>
+                            <View style={[styles.pOutcomeBadge, { backgroundColor: badgeBg }]}>
+                              <Text style={[styles.pOutcomeBadgeText, { color: badgeColor }]}>{badgeLabel}</Text>
+                            </View>
+                          </View>
+                          {ins.notes ? (
+                            <View style={styles.pNotesBox}>
+                              <Text style={styles.pNotesText}>"{ins.notes}"</Text>
+                            </View>
+                          ) : null}
+                          <Text style={styles.pTimeText}>
+                            Recorded at {new Date(ins.inspectedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} by {ins.collectorId?.name || 'Collector'}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={styles.emptyParticipationBox}>
+                    <Text style={{ fontSize: 24, marginBottom: 4 }}>📋</Text>
+                    <Text style={styles.emptyParticipationText}>No household inspections recorded today yet.</Text>
+                    <Text style={styles.emptyParticipationSubtext}>
+                      Outcomes will appear here as your internal collector completes their daily round.
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* -------------------------------------------------------- */}
@@ -2928,6 +3064,150 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
+  },
+  // Task 6 Participation Styles
+  participationCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: "#16a34a",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  participationHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
+  distinctionBanner: {
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  distinctionBannerText: {
+    fontSize: 12,
+    color: "#1E40AF",
+    lineHeight: 17,
+  },
+  participationStatsGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  pStatItem: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  pStatValue: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  pStatLabel: {
+    fontSize: 11,
+    color: "#64748B",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  pStatItemSmall: {
+    flex: 1,
+    borderRadius: 8,
+    padding: 8,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  pStatValueSmall: {
+    fontSize: 15,
+    fontWeight: "bold",
+  },
+  pStatLabelSmall: {
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  participationListTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#1E293B",
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  participationList: {
+    gap: 8,
+  },
+  pInspectionCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  pCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  pHouseholdAddress: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  pCitizenName: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 1,
+  },
+  pOutcomeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  pOutcomeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  pNotesBox: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 6,
+    padding: 6,
+    marginTop: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: "#D97706",
+  },
+  pNotesText: {
+    fontSize: 11,
+    color: "#78350F",
+  },
+  pTimeText: {
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 6,
+  },
+  emptyParticipationBox: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  emptyParticipationText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569",
+    marginTop: 4,
+  },
+  emptyParticipationSubtext: {
+    fontSize: 11,
+    color: "#94A3B8",
+    textAlign: "center",
+    marginTop: 2,
   },
 });
 

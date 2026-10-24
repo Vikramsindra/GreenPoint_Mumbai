@@ -7,8 +7,8 @@
 const SOCIETY_REWARDS_CATALOGUE = [
   {
     id: 'DEMO-REWARD-10',
-    name: 'Demo Society Composting Starter Kit Voucher',
-    description: 'Pilot voucher redeemable for 1 BMC demonstration aerobin/starter composting culture for society premises.',
+    name: 'Demo composting-kit voucher',
+    description: 'Pilot voucher redeemable for 1 demonstration aerobin/starter composting culture for society premises.',
     pointsCost: 10,
     isActive: true,
     category: 'PILOT_EQUIPMENT',
@@ -29,8 +29,8 @@ const SOCIETY_REWARDS_CATALOGUE = [
   },
   {
     id: 'DEMO-REWARD-50',
-    name: 'Demo Clean Society Recognition Certificate',
-    description: 'Official BMC GreenPoint Mumbai pilot certificate acknowledging excellent segregation compliance.',
+    name: 'Demo recognition certificate',
+    description: 'Demonstration clean society recognition certificate acknowledging excellent segregation compliance in the pilot.',
     pointsCost: 50,
     isActive: true,
     category: 'PILOT_RECOGNITION',

@@ -13,6 +13,8 @@ const Household = require('../models/Household');
 const SocietyMembership = require('../models/SocietyMembership');
 const BulkCollection = require('../models/BulkCollection');
 const SocietyPointEvent = require('../models/SocietyPointEvent');
+const HouseholdInspection = require('../models/HouseholdInspection');
+const { getIstBusinessDate } = require('../utils/dateHelper');
 const { isValidWard, VALID_WARDS } = require('../constants/wards');
 const {
   generateQRCodeString,
@@ -139,6 +141,76 @@ router.get('/my', auth, requireRole('society_representative'), async (req, res) 
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch society: ' + error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// GET /api/societies/my/household-inspections - Representative fetches today's participation
+// -------------------------------------------------------------
+router.get('/my/household-inspections', auth, requireRole('society_representative'), async (req, res) => {
+  try {
+    const society = await Society.findOne({ representativeId: req.user.id });
+    if (!society) {
+      return res.status(404).json({
+        success: false,
+        message: 'No society found for this representative'
+      });
+    }
+
+    if (society.registrationStatus !== 'APPROVED') {
+      return res.status(403).json({
+        success: false,
+        message: 'Society is not approved yet'
+      });
+    }
+
+    const istBusinessDate = getIstBusinessDate(new Date());
+
+    const totalAssigned = await SocietyMembership.countDocuments({
+      societyId: society._id,
+      status: 'APPROVED'
+    });
+
+    const inspections = await HouseholdInspection.find({
+      societyId: society._id,
+      istBusinessDate
+    })
+      .populate('householdId', 'address qrCode')
+      .populate('citizenId', 'name phone')
+      .populate('collectorId', 'name')
+      .sort({ inspectedAt: -1 });
+
+    const inspectedToday = inspections.length;
+    const segregatedToday = inspections.filter(i => i.outcome === 'SEGREGATED').length;
+    const mixedToday = inspections.filter(i => i.outcome === 'MIXED').length;
+    const noHandoverToday = inspections.filter(i => i.outcome === 'NO_HANDOVER').length;
+    const successfulHandoversToday = segregatedToday + mixedToday;
+    const remainingToday = Math.max(0, totalAssigned - inspectedToday);
+
+    res.json({
+      success: true,
+      data: {
+        society: {
+          _id: society._id,
+          name: society.name
+        },
+        stats: {
+          totalAssigned,
+          inspectedToday,
+          segregatedToday,
+          mixedToday,
+          noHandoverToday,
+          successfulHandoversToday,
+          remainingToday
+        },
+        inspections: inspections.slice(0, 50),
+        istBusinessDate,
+        policyNote: 'Household records show participation; BMC-verified society handovers earn society points.'
+      },
+      message: "Today's household participation fetched"
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch household participation: ' + error.message });
   }
 });
 
