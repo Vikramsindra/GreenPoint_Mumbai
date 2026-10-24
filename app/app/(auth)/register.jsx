@@ -26,37 +26,19 @@ export default function RegisterScreen() {
     password: "",
     confirm: "",
     role: "citizen",
-    collectorId: "",
-    wardId: "",
   });
   const [errors, setErrors] = useState({});
-  const [wards] = useState([
-    "N-WARD",
-    "S-WARD",
-    "E-WARD",
-    "W-WARD",
-    "C-WARD",
-    "H-WARD",
-  ]);
-  const [showWardPicker, setShowWardPicker] = useState(false);
 
   const validate = () => {
     const newErrors = {};
-    if (form.name.length < 2)
+    if (form.name.trim().length < 2)
       newErrors.name = "Name must be at least 2 characters";
-    if (form.phone.length !== 10)
+    if (form.phone.trim().length !== 10)
       newErrors.phone = "Phone must be exactly 10 digits";
     if (form.password.length < 6)
       newErrors.password = "Password must be at least 6 characters";
     if (form.password !== form.confirm)
       newErrors.confirm = "Passwords do not match";
-
-    // Collector and BMC Collector-specific validation
-    if (form.role === "collector" || form.role === "bmc_collector") {
-      if (form.collectorId.length < 3)
-        newErrors.collectorId = "Collector ID must be at least 3 characters";
-      if (!form.wardId) newErrors.wardId = "Ward selection is required";
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -64,26 +46,21 @@ export default function RegisterScreen() {
 
   const handleRoleChange = (role) => {
     setForm({ ...form, role });
+    setErrors({});
   };
 
   const handleRegister = async () => {
     if (!validate()) return;
     try {
       const registerData = {
-        name: form.name,
-        phone: form.phone,
+        name: form.name.trim(),
+        phone: form.phone.trim(),
         password: form.password,
         role: form.role,
       };
 
-      // Include collector-specific fields if role is collector or bmc_collector
-      if (form.role === "collector" || form.role === "bmc_collector") {
-        registerData.collectorId = form.collectorId;
-        registerData.wardId = form.wardId;
-      }
-
       await register(registerData);
-      // RootLayout routes the authenticated user to the selected role flow.
+      // RootLayout will navigate based on user.role
     } catch (e) {
       setErrors({ form: e.message || "Registration failed" });
     }
@@ -96,11 +73,9 @@ export default function RegisterScreen() {
           <Text style={styles.backTxt}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>
-          {form.role === "collector"
-            ? "Society Collector Portal"
-            : form.role === "bmc_collector"
-            ? "BMC Collector Portal"
-            : "Create Account"}
+          {form.role === "society_representative"
+            ? "Society Representative Signup"
+            : "Create Citizen Account"}
         </Text>
       </View>
 
@@ -109,46 +84,70 @@ export default function RegisterScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scroll}>
-          {/* Role Selection - First Step */}
+          {/* Role Selection */}
           <View style={styles.field}>
-            <Text style={styles.label}>Select Role</Text>
+            <Text style={styles.label}>Select Account Type</Text>
             <View style={styles.roleGrid}>
-              {["citizen", "collector", "bmc_collector"].map((r) => (
+              {[
+                {
+                  id: "citizen",
+                  icon: "👤",
+                  title: "Citizen",
+                  desc: "Household resident segregating waste and earning GreenPoints",
+                },
+                {
+                  id: "society_representative",
+                  icon: "🏢",
+                  title: "Society Representative",
+                  desc: "Cooperative Housing Society manager registering society for municipal collections",
+                },
+              ].map((r) => (
                 <TouchableOpacity
-                  key={r}
+                  key={r.id}
                   style={[
                     styles.roleBtn,
-                    form.role === r && styles.roleBtnActive,
+                    form.role === r.id && styles.roleBtnActive,
                   ]}
-                  onPress={() => handleRoleChange(r)}
+                  onPress={() => handleRoleChange(r.id)}
                 >
-                  <Text style={styles.roleIcon}>
-                    {r === "citizen" ? "👤" : r === "collector" ? "🏛️" : "🚛"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.roleTxt,
-                      form.role === r && styles.roleTxtActive,
-                    ]}
-                  >
-                    {r === "citizen"
-                      ? "Citizen"
-                      : r === "collector"
-                      ? "Collector"
-                      : "BMC Collector"}
-                  </Text>
+                  <Text style={styles.roleIcon}>{r.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.roleTxt,
+                        form.role === r.id && styles.roleTxtActive,
+                      ]}
+                    >
+                      {r.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.roleSubtext,
+                        form.role === r.id && styles.roleSubtextActive,
+                      ]}
+                    >
+                      {r.desc}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
 
-          {/* Citizen Icon or Collector Info */}
-          {form.role === "citizen" && (
+          {/* Role Info Box */}
+          {form.role === "society_representative" ? (
+            <View style={styles.roleDescription}>
+              <Text style={styles.roleDescLabel}>🏢 Society Representative Registration</Text>
+              <Text style={styles.roleDescText}>
+                Create your representative account first. After logging in, you will be prompted to submit your Society Application for Ward Officer approval.
+              </Text>
+            </View>
+          ) : (
             <View style={styles.illustrationContainer}>
               <View style={styles.citizenIconContainer}>
-                <Text style={styles.citizenIcon}>👤</Text>
+                <Text style={styles.citizenIcon}>🌱</Text>
               </View>
-              <Text style={styles.illustrationLabel}>Citizen Account</Text>
+              <Text style={styles.illustrationLabel}>Resident Household Account</Text>
             </View>
           )}
 
@@ -165,9 +164,11 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.label}>Mobile Phone Number</Text>
             <TextInput
               style={styles.input}
+              placeholder="10-digit mobile number"
+              placeholderTextColor="#9CA3AF"
               keyboardType="numeric"
               maxLength={10}
               value={form.phone}
@@ -176,104 +177,12 @@ export default function RegisterScreen() {
             {errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
           </View>
 
-          {/* Collector-specific fields */}
-          {(form.role === "collector" || form.role === "bmc_collector") && (
-            <>
-              <View style={styles.roleDescription}>
-                <Text style={styles.roleDescLabel}>
-                  {form.role === "collector"
-                    ? "Society Waste Collector"
-                    : "Bulk/BMC Waste Collector"}
-                </Text>
-                <Text style={styles.roleDescText}>
-                  {form.role === "collector"
-                    ? "Collects segregated waste from households in your assigned society"
-                    : "Collects bulk waste from collection points, public bins, and transfer stations"}
-                </Text>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>
-                  Official {form.role === "collector" ? "Society" : "BMC"} Collector
-                  ID *
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    errors.collectorId && styles.inputError,
-                  ]}
-                  placeholder="Enter your Collector ID"
-                  placeholderTextColor="#9CA3AF"
-                  value={form.collectorId}
-                  onChangeText={(t) => setForm({ ...form, collectorId: t })}
-                />
-                {errors.collectorId && (
-                  <Text style={styles.error}>{errors.collectorId}</Text>
-                )}
-                <Text style={styles.infoCaption}>
-                  Provided by your Ward Office
-                </Text>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Ward Selection *</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.input,
-                    styles.wardSelector,
-                    !form.wardId && styles.wardPlaceholder,
-                  ]}
-                  onPress={() => setShowWardPicker(!showWardPicker)}
-                >
-                  <Text
-                    style={
-                      form.wardId
-                        ? styles.wardSelectedText
-                        : styles.wardPlaceholderText
-                    }
-                  >
-                    {form.wardId || "Select your Ward"}
-                  </Text>
-                  <Text style={styles.wardDropdownArrow}>▼</Text>
-                </TouchableOpacity>
-                {showWardPicker && (
-                  <View style={styles.wardPickerContainer}>
-                    {wards.map((ward) => (
-                      <TouchableOpacity
-                        key={ward}
-                        style={[
-                          styles.wardOption,
-                          form.wardId === ward && styles.wardOptionSelected,
-                        ]}
-                        onPress={() => {
-                          setForm({ ...form, wardId: ward });
-                          setShowWardPicker(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.wardOptionText,
-                            form.wardId === ward &&
-                              styles.wardOptionTextSelected,
-                          ]}
-                        >
-                          {ward}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-                {errors.wardId && (
-                  <Text style={styles.error}>{errors.wardId}</Text>
-                )}
-              </View>
-            </>
-          )}
-
           <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>Password (minimum 6 characters)</Text>
             <TextInput
               style={styles.input}
+              placeholder="Create a secure password"
+              placeholderTextColor="#9CA3AF"
               secureTextEntry
               value={form.password}
               onChangeText={(t) => setForm({ ...form, password: t })}
@@ -287,6 +196,8 @@ export default function RegisterScreen() {
             <Text style={styles.label}>Confirm Password</Text>
             <TextInput
               style={styles.input}
+              placeholder="Re-enter password"
+              placeholderTextColor="#9CA3AF"
               secureTextEntry
               value={form.confirm}
               onChangeText={(t) => setForm({ ...form, confirm: t })}
@@ -306,7 +217,11 @@ export default function RegisterScreen() {
             {isLoading ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
-              <Text style={styles.submitTxt}>Register</Text>
+              <Text style={styles.submitTxt}>
+                {form.role === "society_representative"
+                  ? "Create Representative Account"
+                  : "Register as Citizen"}
+              </Text>
             )}
           </TouchableOpacity>
 
@@ -314,7 +229,7 @@ export default function RegisterScreen() {
             onPress={() => router.push("/(auth)/login")}
             style={styles.loginLink}
           >
-            <Text style={styles.loginTxt}>Already have an account? Login</Text>
+            <Text style={styles.loginTxt}>Already have an account? Login here</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -333,7 +248,7 @@ const styles = StyleSheet.create({
   },
   backTxt: { color: "white", fontSize: 16, fontWeight: "600" },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
     color: "white",
     marginTop: SPACING.sm,
@@ -348,7 +263,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     marginBottom: 6,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   input: {
     borderWidth: 1,
@@ -356,85 +271,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-  },
-  inputError: {
-    borderColor: COLORS.danger,
+    color: COLORS.text,
   },
   error: { color: COLORS.danger, fontSize: 12, marginTop: 4 },
-  infoCaption: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  wardSelector: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  wardPlaceholder: {
-    backgroundColor: "#F9FAFB",
-  },
-  wardSelectedText: {
-    color: "#1F2937",
-    fontWeight: "500",
-  },
-  wardPlaceholderText: {
-    color: "#9CA3AF",
-  },
-  wardDropdownArrow: {
-    color: "#6B7280",
-    fontSize: 12,
-  },
-  wardPickerContainer: {
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    marginTop: 8,
-    overflow: "hidden",
-  },
-  wardOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  wardOptionSelected: {
-    backgroundColor: "#F0FDF4",
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
-  },
-  wardOptionText: {
-    fontSize: 14,
-    color: "#6B7280",
-    fontWeight: "500",
-  },
-  wardOptionTextSelected: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
   formError: {
     color: COLORS.danger,
     fontSize: 14,
     textAlign: "center",
     marginBottom: 16,
   },
-  roleRow: { flexDirection: "row", gap: 12 },
   roleGrid: { 
     flexDirection: "column", 
-    gap: 12,
+    gap: 10,
     marginBottom: 12,
   },
   roleBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderWidth: 2,
     borderColor: COLORS.border,
     borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
     flexDirection: "row",
+    gap: 12,
+    backgroundColor: "#FAFAFA",
   },
   roleBtnActive: {
     backgroundColor: COLORS.primary,
@@ -442,15 +302,21 @@ const styles = StyleSheet.create({
   },
   roleIcon: {
     fontSize: 28,
-    marginRight: 12,
   },
   roleTxt: { 
-    color: COLORS.textSecondary, 
-    fontWeight: "600",
+    color: COLORS.text, 
+    fontWeight: "700",
     fontSize: 15,
-    flex: 1,
   },
   roleTxtActive: { color: COLORS.white },
+  roleSubtext: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  roleSubtextActive: {
+    color: "#E0F2FE",
+  },
   roleDescription: {
     backgroundColor: "#F0FDF4",
     borderLeftWidth: 4,
@@ -472,26 +338,26 @@ const styles = StyleSheet.create({
   },
   illustrationContainer: {
     alignItems: "center",
-    marginVertical: 24,
+    marginVertical: 16,
   },
   citizenIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "#E0F2FE",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
     borderWidth: 2,
     borderColor: COLORS.primary,
   },
   citizenIcon: {
-    fontSize: 40,
+    fontSize: 32,
   },
   illustrationLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
-    color: "#1F2937",
+    color: "#4B5563",
   },
   submitBtn: {
     backgroundColor: COLORS.primary,
@@ -503,5 +369,5 @@ const styles = StyleSheet.create({
   },
   submitTxt: { color: COLORS.white, fontSize: 16, fontWeight: "bold" },
   loginLink: { marginTop: 20, alignItems: "center" },
-  loginTxt: { color: COLORS.primary, fontSize: 14, fontWeight: "500" },
+  loginTxt: { color: COLORS.primary, fontSize: 14, fontWeight: "600" },
 });

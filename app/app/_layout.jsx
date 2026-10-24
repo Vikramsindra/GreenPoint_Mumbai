@@ -1,3 +1,4 @@
+// filepath: app/app/_layout.jsx
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
@@ -40,6 +41,8 @@ export default function RootLayout() {
         router.replace("/(collector)/round");
       } else if (user?.role === "bmc_collector") {
         router.replace("/(bmc-collector)/dashboard");
+      } else if (user?.role === "society_representative") {
+        router.replace("/(society-representative)/dashboard");
       } else {
         router.replace("/(tabs)/home");
       }
@@ -51,6 +54,8 @@ export default function RootLayout() {
         router.replace("/(collector)/round");
       } else if (user?.role === "bmc_collector" && currentPage !== "(bmc-collector)") {
         router.replace("/(bmc-collector)/dashboard");
+      } else if (user?.role === "society_representative" && currentPage !== "(society-representative)") {
+        router.replace("/(society-representative)/dashboard");
       } else if (user?.role === "citizen" && !["(tabs)", "leaderboard", "profile", "rewards-history"].includes(currentPage)) {
         router.replace("/(tabs)/home");
       }

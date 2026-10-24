@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['citizen', 'collector', 'bmc_collector', 'officer'],
+    enum: ['citizen', 'collector', 'bmc_collector', 'officer', 'society_representative'],
     default: 'citizen'
   },
   collectorId: {
@@ -80,7 +80,6 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-userSchema.index({ phone: 1 }, { unique: true });
 userSchema.index({ wardId: 1, role: 1 });
 
 userSchema.methods.toSafeObject = function () {

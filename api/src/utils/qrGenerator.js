@@ -31,6 +31,18 @@ async function generateQRCodeImage(qrCodeString) {
   }
 }
 
+// Generate a unique Society QR code string identifier
+// Format: GP-SOC-XXXXXXXXXXXX (12 random uppercase alphanumeric chars)
+// Clearly distinct from household GP-HH- format.
+function generateSocietyQRCodeString() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = 'GP-SOC-';
+  for (let i = 0; i < 12; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // Generate QR code as raw PNG buffer (for printing/download)
 async function generateQRCodeBuffer(qrCodeString) {
   try {
@@ -46,4 +58,9 @@ async function generateQRCodeBuffer(qrCodeString) {
   }
 }
 
-module.exports = { generateQRCodeString, generateQRCodeImage, generateQRCodeBuffer };
+module.exports = {
+  generateQRCodeString,
+  generateSocietyQRCodeString,
+  generateQRCodeImage,
+  generateQRCodeBuffer
+};

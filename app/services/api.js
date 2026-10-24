@@ -167,4 +167,20 @@ export const getBMCCollectionHistory = async (filters = {}) => {
   return res;
 };
 
+// Society Representative (Task 1)
+export const submitSocietyApplication = async (data) => {
+  const res = await api.post('/societies', data);
+  return res.data;
+};
+
+export const getMySociety = async () => {
+  const res = await api.get('/societies/my');
+  return res.data;
+};
+
+export const getSocietyQrData = async (societyId) => {
+  const res = await api.get(`/societies/${societyId}/qr-image?format=json`);
+  return res.data;
+};
+
 export default api;

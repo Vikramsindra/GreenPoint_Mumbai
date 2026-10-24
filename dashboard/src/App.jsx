@@ -9,6 +9,7 @@ import {
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import WardOverview from "./pages/WardOverview";
+import Societies from "./pages/Societies";
 import Violations from "./pages/Violations";
 import Citizens from "./pages/Citizens";
 import Campaigns from "./pages/Campaigns";
@@ -47,6 +48,7 @@ export default function App() {
           }
         >
           <Route path="/" element={<WardOverview />} />
+          <Route path="/societies" element={<Societies />} />
           <Route path="/bmc-operations" element={<BMCOperations />} />
           <Route path="/violations" element={<Violations />} />
           <Route path="/citizens" element={<Citizens />} />

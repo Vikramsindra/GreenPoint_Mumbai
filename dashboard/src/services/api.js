@@ -52,10 +52,33 @@ export const getCitizens = (params) => {
   return api.get(`/dashboard/citizens?${query.toString()}`);
 };
 
-export const getCampaigns = () => api.get('/awareness/campaigns'); // Usually officer can view all and deactivate.. 
+export const getCampaigns = () => api.get('/awareness/campaigns');
 
 export const createCampaign = (data) => api.post('/dashboard/campaigns', data);
 
 export const deactivateCampaign = (id) => api.patch(`/dashboard/campaigns/${id}/deactivate`);
+
+// Societies Management (Task 1)
+export const getSocieties = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.status) query.append('status', params.status);
+  if (params.page) query.append('page', params.page);
+  if (params.limit) query.append('limit', params.limit);
+  return api.get(`/societies?${query.toString()}`);
+};
+
+export const getSocietyDetails = (id) => api.get(`/societies/${id}`);
+
+export const reviewSociety = (id, data) => api.patch(`/societies/${id}/review`, data);
+
+export const getSocietyQrData = (id) => api.get(`/societies/${id}/qr-image?format=json`);
+
+export const downloadSocietyQrBlob = (id) => {
+  const token = localStorage.getItem('gp_token');
+  return axios.get(`/api/societies/${id}/qr-image`, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: 'blob'
+  });
+};
 
 export default api;

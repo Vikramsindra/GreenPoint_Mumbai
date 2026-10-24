@@ -55,7 +55,6 @@ const householdSchema = new mongoose.Schema({
   }
 });
 
-householdSchema.index({ citizenId: 1 });
 householdSchema.index({ wardId: 1 });
 
 module.exports = mongoose.model('Household', householdSchema);

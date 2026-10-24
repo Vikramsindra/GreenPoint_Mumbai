@@ -14,11 +14,11 @@ const collectionPointSchema = new mongoose.Schema({
   location: {
     lat: {
       type: Number,
-      required: true
+      required: false
     },
     lng: {
       type: Number,
-      required: true
+      required: false
     }
   },
   address: {
@@ -29,6 +29,11 @@ const collectionPointSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
+  },
+  societyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Society',
+    default: null
   },
   assignedCollectorId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -64,5 +69,9 @@ const collectionPointSchema = new mongoose.Schema({
 collectionPointSchema.index({ wardId: 1, type: 1 });
 collectionPointSchema.index({ assignedCollectorId: 1 });
 collectionPointSchema.index({ isActive: 1 });
+collectionPointSchema.index(
+  { societyId: 1 },
+  { unique: true, partialFilterExpression: { societyId: { $type: 'objectId' } } }
+);
 
 module.exports = mongoose.model('CollectionPoint', collectionPointSchema);

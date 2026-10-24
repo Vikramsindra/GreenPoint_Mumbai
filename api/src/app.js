@@ -22,14 +22,20 @@ const awarenessRoutes = require('./routes/awareness');
 const dashboardRoutes = require('./routes/dashboard');
 const bmcCollectionsRoutes = require('./routes/bmcCollections');
 const collectionPointsRoutes = require('./routes/collectionPoints');
+const householdRoutes = require('./routes/households');
+const societiesRoutes = require('./routes/societies');
 
-// Import cron jobs
-require('./jobs/penaltyReset');
+// Import cron jobs only in production / dev (disabled in tests)
+if (process.env.NODE_ENV !== 'test') {
+  require('./jobs/penaltyReset');
+}
 
 const app = express();
 
-// Connect to database
-connectDB();
+// Connect to database if not in testing mode (tests handle isolated DB connection)
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 // Core middleware
 app.use(helmet());
@@ -53,9 +59,8 @@ app.use('/api/awareness', awarenessRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/bmc-collections', bmcCollectionsRoutes);
 app.use('/api/collection-points', collectionPointsRoutes);
-
-const householdRoutes = require('./routes/households');
 app.use('/api/households', householdRoutes);
+app.use('/api/societies', societiesRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -73,8 +78,11 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 GreenPoint API running at http://${HOST}:${PORT}`);
-});
+
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 GreenPoint API running at http://${HOST}:${PORT}`);
+  });
+}
 
 module.exports = app;

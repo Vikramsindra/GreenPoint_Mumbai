@@ -8,39 +8,34 @@ const User = require('../models/User');
 const auth = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 
+// Public registration permits only citizen and society_representative accounts.
+// Privileged roles (officer, collector, bmc_collector) cannot be registered publicly.
 const registerSchema = Joi.object({
-  name: Joi.string().min(2).required(),
+  name: Joi.string().min(2).max(100).required(),
   phone: Joi.string().pattern(/^\d{10}$/).required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().valid('citizen', 'collector', 'bmc_collector', 'officer').default('citizen'),
-  collectorId: Joi.when('role', {
-    is: Joi.alternatives().try('collector', 'bmc_collector'),
-    then: Joi.string().min(3).required(),
-    otherwise: Joi.string().allow('')
-  }),
-  wardId: Joi.string().default('N-WARD')
+  role: Joi.string().valid('citizen', 'society_representative').default('citizen'),
+  wardId: Joi.string().trim().default('N-WARD')
 });
 
 router.post('/register', validate(registerSchema), async (req, res) => {
   try {
-    const { name, phone, password, role, collectorId, wardId } = req.body;
+    const { name, phone, password, role, wardId } = req.body;
     const existing = await User.findOne({ phone });
     if (existing) {
       return res.status(409).json({ success: false, message: 'Phone number already registered' });
     }
 
-    // Validate collectorId is provided for collector/bmc_collector roles
-    if ((role === 'collector' || role === 'bmc_collector') && !collectorId) {
-      return res.status(400).json({ success: false, message: 'Collector ID is required for this role' });
-    }
-
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const userData = { name, phone, passwordHash, role, wardId };
-    if (role === 'collector' || role === 'bmc_collector') {
-      userData.collectorId = collectorId;
-    }
+    const userData = {
+      name,
+      phone,
+      passwordHash,
+      role: role || 'citizen',
+      wardId: wardId || 'N-WARD'
+    };
 
     const user = new User(userData);
     await user.save();
@@ -51,7 +46,11 @@ router.post('/register', validate(registerSchema), async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.status(201).json({ success: true, data: { token, user: user.toSafeObject() }, message: 'Registration successful' });
+    res.status(201).json({
+      success: true,
+      data: { token, user: user.toSafeObject() },
+      message: 'Registration successful'
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Registration failed: ' + error.message });
   }
