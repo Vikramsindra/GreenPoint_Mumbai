@@ -92,83 +92,129 @@ export default function HistoryScreen() {
     return icons[wasteType] || "help";
   };
 
-  const renderCollectionItem = ({ item }) => (
-    <View style={styles.collectionCard}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardInfo}>
-          <View
-            style={[
-              styles.wasteTypeIcon,
-              { backgroundColor: getWasteTypeColor(item.wasteType) + "20" },
-            ]}
-          >
+  const renderCollectionItem = ({ item }) => {
+    const isNoHandover = item.outcome === "NO_HANDOVER";
+    return (
+      <View style={styles.collectionCard}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardInfo}>
+            <View
+              style={[
+                styles.wasteTypeIcon,
+                { backgroundColor: getWasteTypeColor(item.wasteType || "mixed") + "20" },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={getWasteTypeIcon(item.wasteType || "mixed")}
+                size={18}
+                color={getWasteTypeColor(item.wasteType || "mixed")}
+              />
+            </View>
+            <View>
+              <Text style={styles.collectionPointName}>
+                {item.societyId?.name || item.collectionPointId?.name || "Unknown Point"}
+              </Text>
+              <Text style={styles.collectionTime}>
+                {new Date(item.timestamp).toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.weightBadge}>
+            <Text style={styles.weightValue}>{isNoHandover ? 0 : item.weight}</Text>
+            <Text style={styles.weightUnit}>kg</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardDetails}>
+          {/* Outcome & Weight Basis Row */}
+          <View style={styles.detailRow}>
+            <View
+              style={{
+                backgroundColor:
+                  item.outcome === "SEGREGATED"
+                    ? "#ecfdf5"
+                    : item.outcome === "MIXED"
+                    ? "#fffbeb"
+                    : "#fef2f2",
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 4,
+                marginRight: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: "700",
+                  color:
+                    item.outcome === "SEGREGATED"
+                      ? "#047857"
+                      : item.outcome === "MIXED"
+                      ? "#b45309"
+                      : "#b91c1c",
+                }}
+              >
+                {item.outcome || "SEGREGATED"}
+              </Text>
+            </View>
+
+            {!isNoHandover && (
+              <Text style={styles.detailLabel}>
+                {item.wasteType ? item.wasteType.toUpperCase() : "WASTE"} • {item.weightBasis || "ESTIMATED"}
+              </Text>
+            )}
+          </View>
+
+          {/* Points awarded row */}
+          <View style={styles.detailRow}>
             <MaterialCommunityIcons
-              name={getWasteTypeIcon(item.wasteType)}
-              size={18}
-              color={getWasteTypeColor(item.wasteType)}
+              name="wallet-giftcard"
+              size={14}
+              color={item.pointsAwarded > 0 ? "#059669" : "#64748b"}
             />
-          </View>
-          <View>
-            <Text style={styles.collectionPointName}>
-              {item.collectionPointId?.name || "Unknown Point"}
+            <Text
+              style={[
+                styles.detailLabel,
+                {
+                  fontWeight: "600",
+                  color: item.pointsAwarded > 0 ? "#059669" : "#64748b",
+                },
+              ]}
+            >
+              {item.pointsAwarded > 0 ? `+${item.pointsAwarded} pts awarded` : "0 pts"}
+              {item.pointsReason ? ` (${item.pointsReason})` : ""}
             </Text>
-            <Text style={styles.collectionTime}>
-              {new Date(item.timestamp).toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+          </View>
+
+          {item.notes && (
+            <View style={styles.detailRow}>
+              <MaterialCommunityIcons name="note-text" size={14} color="#999" />
+              <Text style={styles.detailLabel}>{item.notes}</Text>
+            </View>
+          )}
+
+          <View style={styles.detailRow}>
+            <MaterialCommunityIcons
+              name={item.status === "verified" ? "check-circle" : "clock-outline"}
+              size={14}
+              color={item.status === "verified" ? "#10b981" : "#999"}
+            />
+            <Text
+              style={[
+                styles.detailLabel,
+                { color: item.status === "verified" ? "#10b981" : "#999" },
+              ]}
+            >
+              {item.status === "verified" ? "Officer Verified" : "Pending Officer Review"}
             </Text>
           </View>
-        </View>
-        <View style={styles.weightBadge}>
-          <Text style={styles.weightValue}>{item.weight}</Text>
-          <Text style={styles.weightUnit}>kg</Text>
         </View>
       </View>
-
-      <View style={styles.cardDetails}>
-        <View style={styles.detailRow}>
-          <MaterialCommunityIcons name="tag" size={14} color="#999" />
-          <Text style={styles.detailLabel}>
-            {item.wasteType.charAt(0).toUpperCase() + item.wasteType.slice(1)}{" "}
-            Waste
-          </Text>
-        </View>
-
-        {item.collectionPointId?.type && (
-          <View style={styles.detailRow}>
-            <MaterialCommunityIcons name="information" size={14} color="#999" />
-            <Text style={styles.detailLabel}>
-              {item.collectionPointId.type.replace("_", " ").toUpperCase()}
-            </Text>
-          </View>
-        )}
-
-        {item.notes && (
-          <View style={styles.detailRow}>
-            <MaterialCommunityIcons name="note-text" size={14} color="#999" />
-            <Text style={styles.detailLabel}>{item.notes}</Text>
-          </View>
-        )}
-
-        <View style={styles.detailRow}>
-          <MaterialCommunityIcons
-            name={item.status === "verified" ? "check-circle" : "clock-outline"}
-            size={14}
-            color={item.status === "verified" ? "#10b981" : "#999"}
-          />
-          <Text
-            style={[
-              styles.detailLabel,
-              { color: item.status === "verified" ? "#10b981" : "#999" },
-            ]}
-          >
-            {item.status === "verified" ? "Verified" : "Pending Verification"}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const renderSectionHeader = ({ section: { title, dayCollections } }) => {
     const dayWeight = dayCollections.reduce((sum, c) => sum + c.weight, 0);

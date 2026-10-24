@@ -81,4 +81,11 @@ export const downloadSocietyQrBlob = (id) => {
   });
 };
 
+export const getUsers = (params = {}) => api.get('/dashboard/users', { params });
+
+export const assignBmcCollector = (pointId, bmcCollectorId) =>
+  api.put(`/collection-points/${pointId}/assign`, { bmcCollectorId });
+
 export default api;
+
+

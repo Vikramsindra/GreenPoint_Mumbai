@@ -304,7 +304,26 @@ export default function BMCDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>Municipal Collection Actions</Text>
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#10b981', marginBottom: 12 }]}
+            onPress={() => router.push({ pathname: "/(bmc-collector)/collection-entry", params: { mode: "scan" } })}
+          >
+            <View style={styles.actionContent}>
+              <MaterialCommunityIcons
+                name="qrcode-scan"
+                size={24}
+                color="#fff"
+              />
+              <Text style={styles.actionText}>Scan Society QR</Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={24}
+              color="#fff"
+            />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.actionButton}
@@ -316,7 +335,7 @@ export default function BMCDashboardScreen() {
                 size={24}
                 color="#fff"
               />
-              <Text style={styles.actionText}>Log New Collection</Text>
+              <Text style={styles.actionText}>Log Collection (List / Manual)</Text>
             </View>
             <MaterialCommunityIcons
               name="chevron-right"

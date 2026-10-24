@@ -5,7 +5,9 @@ import {
   getSocietyDetails,
   reviewSociety,
   getSocietyQrData,
-  downloadSocietyQrBlob
+  downloadSocietyQrBlob,
+  getUsers,
+  assignBmcCollector
 } from "../services/api";
 import { useAuthStore } from "../store/authStore";
 
@@ -34,6 +36,12 @@ export default function Societies() {
   // QR preview state
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [isQrLoading, setIsQrLoading] = useState(false);
+
+  // BMC Collector Assignment state
+  const [wardBmcCollectors, setWardBmcCollectors] = useState([]);
+  const [selectedBmcCollectorId, setSelectedBmcCollectorId] = useState("");
+  const [isAssigningBmc, setIsAssigningBmc] = useState(false);
+  const [assignmentMessage, setAssignmentMessage] = useState(null);
 
   // Fetch societies
   const fetchSocieties = useCallback(async (page = 1, status = statusFilter) => {
@@ -64,6 +72,21 @@ export default function Societies() {
     fetchSocieties(1, statusFilter);
   }, [statusFilter]);
 
+  // Load active BMC collectors in officer's ward
+  useEffect(() => {
+    const fetchBmcCollectors = async () => {
+      try {
+        const res = await getUsers({ role: 'bmc_collector' });
+        if (res.success && res.data) {
+          setWardBmcCollectors(res.data.filter(u => u.isActive !== false));
+        }
+      } catch (err) {
+        console.error("Failed to load ward BMC collectors:", err);
+      }
+    };
+    fetchBmcCollectors();
+  }, []);
+
   // Open Society Detail Modal
   const handleOpenDetails = async (societyId) => {
     setSelectedSocietyId(societyId);
@@ -76,6 +99,8 @@ export default function Societies() {
     setReviewLng("");
     setReviewError(null);
     setQrDataUrl(null);
+    setAssignmentMessage(null);
+    setSelectedBmcCollectorId("");
 
     try {
       const res = await getSocietyDetails(societyId);
@@ -83,6 +108,13 @@ export default function Societies() {
         setDetailSociety(res.data);
         if (res.data.location?.lat != null) setReviewLat(res.data.location.lat.toString());
         if (res.data.location?.lng != null) setReviewLng(res.data.location.lng.toString());
+
+        // Pre-select current BMC collector if assigned
+        const currentCollector = res.data.collectionPointId?.assignedCollectorId?._id ||
+          res.data.collectionPointId?.assignedCollectorId;
+        if (currentCollector) {
+          setSelectedBmcCollectorId(currentCollector.toString());
+        }
 
         // If approved, load QR code
         if (res.data.registrationStatus === "APPROVED" && res.data.qrCode) {
@@ -95,6 +127,39 @@ export default function Societies() {
       setDetailError(err.response?.data?.message || err.message || "Failed to load society details");
     } finally {
       setIsDetailLoading(false);
+    }
+  };
+
+  const handleAssignBmc = async () => {
+    if (!selectedBmcCollectorId) {
+      setAssignmentMessage({ type: 'error', text: 'Please select an active BMC collector' });
+      return;
+    }
+    const pointId = detailSociety?.collectionPointId?._id || detailSociety?.collectionPointId;
+    if (!pointId) {
+      setAssignmentMessage({ type: 'error', text: 'Linked municipal collection point not found' });
+      return;
+    }
+
+    setIsAssigningBmc(true);
+    setAssignmentMessage(null);
+    try {
+      const res = await assignBmcCollector(pointId, selectedBmcCollectorId);
+      if (res.success) {
+        setAssignmentMessage({ type: 'success', text: 'BMC Collector successfully assigned to society collection point!' });
+        // Refresh details and table
+        const updated = await getSocietyDetails(detailSociety._id);
+        if (updated.success) {
+          setDetailSociety(updated.data);
+        }
+        fetchSocieties(pagination.page);
+      } else {
+        setAssignmentMessage({ type: 'error', text: res.message || 'Failed to assign BMC collector' });
+      }
+    } catch (err) {
+      setAssignmentMessage({ type: 'error', text: err.response?.data?.message || err.message || 'Failed to assign BMC collector' });
+    } finally {
+      setIsAssigningBmc(false);
     }
   };
 
@@ -272,6 +337,7 @@ export default function Societies() {
                   <th className="py-3.5 px-4">Ward & Address</th>
                   <th className="py-3.5 px-4">Representative</th>
                   <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">BMC Collector</th>
                   <th className="py-3.5 px-4">Submitted At</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
@@ -316,6 +382,26 @@ export default function Societies() {
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                           Rejected
                         </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      {soc.registrationStatus === "APPROVED" ? (
+                        soc.collectionPointId?.assignedCollectorId ? (
+                          <div>
+                            <div className="font-semibold text-gray-900 text-xs">
+                              {soc.collectionPointId.assignedCollectorId.name}
+                            </div>
+                            <div className="text-[11px] text-gray-500 font-mono">
+                              ID: {soc.collectionPointId.assignedCollectorId.collectorId || soc.collectionPointId.assignedCollectorId.phone}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                            Unassigned
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="py-4 px-4 text-xs text-gray-500">
@@ -555,6 +641,76 @@ export default function Societies() {
                             className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors mt-2"
                           >
                             ⬇️ Download QR Image (PNG)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* BMC Collector Assignment Control */}
+                      <div className="bg-white p-4 rounded-xl border border-emerald-100 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-bold text-gray-900 uppercase tracking-wide">
+                              Assigned BMC Municipal Collector
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Responsible for municipal society aggregated waste pickups
+                            </div>
+                          </div>
+                          {detailSociety.collectionPointId?.assignedCollectorId ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              ✓ Assigned
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                              ⚠️ Unassigned
+                            </span>
+                          )}
+                        </div>
+
+                        {detailSociety.collectionPointId?.assignedCollectorId && (
+                          <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-100 flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-bold text-gray-900">
+                                {detailSociety.collectionPointId.assignedCollectorId.name}
+                              </div>
+                              <div className="text-xs text-gray-600 font-mono mt-0.5">
+                                Collector ID: {detailSociety.collectionPointId.assignedCollectorId.collectorId || "N/A"} • Phone: {detailSociety.collectionPointId.assignedCollectorId.phone}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {assignmentMessage && (
+                          <div
+                            className={`p-3 rounded-lg text-xs font-medium border ${
+                              assignmentMessage.type === "success"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : "bg-rose-50 text-rose-800 border-rose-200"
+                            }`}
+                          >
+                            {assignmentMessage.text}
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <select
+                            value={selectedBmcCollectorId}
+                            onChange={(e) => setSelectedBmcCollectorId(e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                          >
+                            <option value="">-- Select Active BMC Collector in Ward {user?.wardId} --</option>
+                            {wardBmcCollectors.map((col) => (
+                              <option key={col._id} value={col._id}>
+                                {col.name} ({col.collectorId || col.phone})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={handleAssignBmc}
+                            disabled={isAssigningBmc || !selectedBmcCollectorId}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition-colors whitespace-nowrap"
+                          >
+                            {isAssigningBmc ? "Assigning..." : "Assign BMC Collector"}
                           </button>
                         </div>
                       </div>

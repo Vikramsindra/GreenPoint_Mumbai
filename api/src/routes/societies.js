@@ -11,6 +11,8 @@ const CollectionPoint = require('../models/CollectionPoint');
 const User = require('../models/User');
 const Household = require('../models/Household');
 const SocietyMembership = require('../models/SocietyMembership');
+const BulkCollection = require('../models/BulkCollection');
+const SocietyPointEvent = require('../models/SocietyPointEvent');
 const { isValidWard, VALID_WARDS } = require('../constants/wards');
 const {
   generateQRCodeString,
@@ -99,7 +101,11 @@ router.post('/', auth, requireRole('society_representative'), validate(createSoc
 router.get('/my', auth, requireRole('society_representative'), async (req, res) => {
   try {
     let society = await Society.findOne({ representativeId: req.user.id })
-      .populate('collectionPointId', 'name type address wardId location isActive')
+      .populate({
+        path: 'collectionPointId',
+        select: 'name type address wardId location isActive assignedCollectorId',
+        populate: { path: 'assignedCollectorId', select: 'name phone collectorId role' }
+      })
       .populate('reviewedBy', 'name phone email')
       .populate('internalCollectorId', 'name phone collectorId role');
 
@@ -302,6 +308,52 @@ router.get('/my/members', auth, requireRole('society_representative'), async (re
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch members: ' + error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// GET /api/societies/my/handovers - Representative views recent municipal handovers & points
+// -------------------------------------------------------------
+router.get('/my/handovers', auth, requireRole('society_representative'), async (req, res) => {
+  try {
+    const society = await Society.findOne({ representativeId: req.user.id });
+    if (!society) {
+      return res.status(404).json({ success: false, message: 'No society found for this representative' });
+    }
+
+    if (society.registrationStatus !== 'APPROVED') {
+      return res.status(403).json({
+        success: false,
+        message: 'Municipal handover records are only available for approved societies'
+      });
+    }
+
+    const handovers = await BulkCollection.find({ societyId: society._id })
+      .populate('bmcCollectorId', 'name phone collectorId')
+      .sort({ timestamp: -1 })
+      .limit(30);
+
+    const ledger = await SocietyPointEvent.find({ societyId: society._id })
+      .sort({ createdAt: -1 })
+      .limit(30);
+
+    res.json({
+      success: true,
+      data: {
+        society: {
+          id: society._id,
+          name: society.name,
+          pointsBalance: society.pointsBalance || 0,
+          wardId: society.wardId
+        },
+        pointsBalance: society.pointsBalance || 0,
+        handovers,
+        ledger
+      },
+      message: 'Society municipal handovers retrieved successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch handovers: ' + error.message });
   }
 });
 
@@ -634,7 +686,11 @@ router.get('/', auth, requireRole('officer'), async (req, res) => {
     const societies = await Society.find(filter)
       .populate('representativeId', 'name phone email')
       .populate('reviewedBy', 'name')
-      .populate('collectionPointId', 'name type address location isActive')
+      .populate({
+        path: 'collectionPointId',
+        select: 'name type address location isActive assignedCollectorId',
+        populate: { path: 'assignedCollectorId', select: 'name phone collectorId role' }
+      })
       .sort({ submittedAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
@@ -668,7 +724,11 @@ router.get('/:id', auth, async (req, res) => {
     const society = await Society.findById(id)
       .populate('representativeId', 'name phone email')
       .populate('reviewedBy', 'name phone email')
-      .populate('collectionPointId', 'name type address wardId location isActive');
+      .populate({
+        path: 'collectionPointId',
+        select: 'name type address wardId location isActive assignedCollectorId',
+        populate: { path: 'assignedCollectorId', select: 'name phone collectorId role' }
+      });
 
     if (!society) {
       return res.status(404).json({ success: false, message: 'Society not found' });

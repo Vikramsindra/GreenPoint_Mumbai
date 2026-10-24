@@ -24,6 +24,7 @@ import {
   reviewMembershipRequest,
   lookupCollectorByPhone,
   assignInternalCollector,
+  getSocietyHandovers,
 } from "../../services/api";
 import { COLORS, SPACING, SHADOW } from "../../constants/theme";
 
@@ -86,6 +87,27 @@ export default function SocietyRepresentativeDashboard() {
   const [collectorError, setCollectorError] = useState(null);
   const [isAssigningCollector, setIsAssigningCollector] = useState(false);
 
+  // Task 4: Society Points & Municipal Handovers state
+  const [handovers, setHandovers] = useState([]);
+  const [isLoadingHandovers, setIsLoadingHandovers] = useState(false);
+
+  const loadHandovers = useCallback(async () => {
+    setIsLoadingHandovers(true);
+    try {
+      const res = await getSocietyHandovers();
+      if (res.success && res.data) {
+        setHandovers(res.data.handovers || []);
+        if (res.data.pointsBalance != null) {
+          setSociety((prev) => (prev ? { ...prev, pointsBalance: res.data.pointsBalance } : prev));
+        }
+      }
+    } catch (err) {
+      console.log("Failed to load society handovers:", err.message);
+    } finally {
+      setIsLoadingHandovers(false);
+    }
+  }, []);
+
   const loadMembers = useCallback(async () => {
     setIsLoadingMembers(true);
     try {
@@ -110,6 +132,7 @@ export default function SocietyRepresentativeDashboard() {
         if (res.data.registrationStatus === "APPROVED") {
           loadQr(res.data._id);
           loadMembers();
+          loadHandovers();
         }
       } else {
         setSociety(null);
@@ -125,7 +148,7 @@ export default function SocietyRepresentativeDashboard() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [loadMembers]);
+  }, [loadMembers, loadHandovers]);
 
   const loadQr = async (societyId) => {
     setIsLoadingQr(true);
@@ -619,8 +642,141 @@ export default function SocietyRepresentativeDashboard() {
                 ) : null}
 
                 <TouchableOpacity onPress={handleRefresh} style={styles.refreshApprovedBtn}>
-                  <Text style={styles.refreshApprovedBtnText}>🔄 Refresh Identity</Text>
+                  <Text style={styles.refreshApprovedBtnText}>🔄 Refresh Identity & Balance</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 4: SOCIETY REWARD WALLET & POINTS BALANCE           */}
+              {/* -------------------------------------------------------- */}
+              <View style={[styles.card, styles.societyWalletCard]}>
+                <View style={styles.walletHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.walletLabel}>SOCIETY REWARD WALLET</Text>
+                    <Text style={styles.walletPoints}>
+                      {society.pointsBalance || 0}{" "}
+                      <Text style={styles.walletPointsUnit}>PTS</Text>
+                    </Text>
+                  </View>
+                  <View style={styles.walletIconCircle}>
+                    <Text style={{ fontSize: 26 }}>🏆</Text>
+                  </View>
+                </View>
+                <Text style={styles.walletSubtitle}>
+                  Earned via verified municipal segregated waste handovers (10 pts/day max). Points belong directly to the society.
+                </Text>
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 4: MUNICIPAL WASTE HANDOVER RECEIPTS                */}
+              {/* -------------------------------------------------------- */}
+              <View style={[styles.card, styles.handoversCard]}>
+                <View style={styles.handoversHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.handoversTitle}>Municipal Collection Receipts</Text>
+                    <Text style={styles.handoversSubtitle}>
+                      Aggregate waste handovers inspected by BMC bulk collectors
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={loadHandovers} style={styles.handoversRefreshBtn}>
+                    <Text style={styles.handoversRefreshBtnText}>
+                      {isLoadingHandovers ? "..." : "🔄 Refresh"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {isLoadingHandovers && handovers.length === 0 ? (
+                  <View style={{ padding: 20, alignItems: "center" }}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  </View>
+                ) : handovers.length === 0 ? (
+                  <View style={styles.emptyHandoversBox}>
+                    <Text style={{ fontSize: 32, marginBottom: 6 }}>🚛</Text>
+                    <Text style={styles.emptyHandoversTitle}>No Municipal Pickups Recorded Yet</Text>
+                    <Text style={styles.emptyHandoversDesc}>
+                      When the BMC collection vehicle arrives, present your Society QR code above. Inspected segregated handovers will appear here with points credited.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.handoversList}>
+                    {handovers.map((item) => {
+                      const isSeg = item.outcome === "SEGREGATED";
+                      const isMixed = item.outcome === "MIXED";
+                      return (
+                        <View key={item._id} style={styles.handoverItemCard}>
+                          <View style={styles.handoverTopRow}>
+                            <View style={styles.handoverLeft}>
+                              <View
+                                style={[
+                                  styles.handoverOutcomeBadge,
+                                  isSeg && styles.badgeSegregated,
+                                  isMixed && styles.badgeMixed,
+                                  !isSeg && !isMixed && styles.badgeNoHandover,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.handoverOutcomeText,
+                                    isSeg && styles.textSegregated,
+                                    isMixed && styles.textMixed,
+                                    !isSeg && !isMixed && styles.textNoHandover,
+                                  ]}
+                                >
+                                  {item.outcome}
+                                </Text>
+                              </View>
+                              <Text style={styles.handoverDate}>
+                                {new Date(item.timestamp).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </Text>
+                            </View>
+
+                            <View style={styles.handoverPointsBadge}>
+                              <Text
+                                style={[
+                                  styles.handoverPointsText,
+                                  item.pointsAwarded > 0 ? styles.pointsPositive : styles.pointsZero,
+                                ]}
+                              >
+                                {item.pointsAwarded > 0 ? `+${item.pointsAwarded} pts` : "0 pts"}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {item.outcome !== "NO_HANDOVER" && (
+                            <View style={styles.handoverDetailRow}>
+                              <Text style={styles.handoverDetailText}>
+                                Stream: <Text style={{ fontWeight: "700" }}>{item.wasteType?.toUpperCase()}</Text> • {item.weight} kg ({item.weightBasis})
+                              </Text>
+                            </View>
+                          )}
+
+                          <View style={styles.handoverReasonBox}>
+                            <Text style={styles.handoverReasonText}>
+                              {item.pointsReason || (item.pointsAwarded > 0 ? "Daily segregation reward" : "No points awarded")}
+                            </Text>
+                          </View>
+
+                          {item.notes ? (
+                            <Text style={styles.handoverNotesText}>
+                              Note: {item.notes}
+                            </Text>
+                          ) : null}
+
+                          {item.bmcCollectorId?.name && (
+                            <Text style={styles.handoverCollectorText}>
+                              Collector: {item.bmcCollectorId.name} ({item.bmcCollectorId.collectorId || item.bmcCollectorId.phone})
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
               {/* -------------------------------------------------------- */}
@@ -1714,4 +1870,204 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+
+  // Society Wallet Card
+  societyWalletCard: {
+    backgroundColor: "#064e3b",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+  },
+  walletHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  walletLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#a7f3d0",
+    letterSpacing: 1,
+  },
+  walletPoints: {
+    fontSize: 34,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginTop: 2,
+  },
+  walletPointsUnit: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#6ee7b7",
+  },
+  walletIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  walletSubtitle: {
+    fontSize: 11,
+    color: "#d1fae5",
+    marginTop: 8,
+    lineHeight: 16,
+  },
+
+  // Handovers List Styles
+  handoversCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  handoversHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  handoversTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#0f172a",
+  },
+  handoversSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  handoversRefreshBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 8,
+  },
+  handoversRefreshBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0d47a1",
+  },
+  emptyHandoversBox: {
+    padding: 24,
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+  },
+  emptyHandoversTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#334155",
+    textAlign: "center",
+  },
+  emptyHandoversDesc: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  handoversList: {
+    gap: 12,
+  },
+  handoverItemCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  handoverTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  handoverLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  handoverOutcomeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  badgeSegregated: {
+    backgroundColor: "#dcfce7",
+  },
+  badgeMixed: {
+    backgroundColor: "#fef3c7",
+  },
+  badgeNoHandover: {
+    backgroundColor: "#fee2e2",
+  },
+  handoverOutcomeText: {
+    fontSize: 11,
+    fontWeight: "bold",
+  },
+  textSegregated: {
+    color: "#15803d",
+  },
+  textMixed: {
+    color: "#b45309",
+  },
+  textNoHandover: {
+    color: "#b91c1c",
+  },
+  handoverDate: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  handoverPointsBadge: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  handoverPointsText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  pointsPositive: {
+    color: "#15803d",
+  },
+  pointsZero: {
+    color: "#64748b",
+  },
+  handoverDetailRow: {
+    marginBottom: 6,
+  },
+  handoverDetailText: {
+    fontSize: 12,
+    color: "#334155",
+  },
+  handoverReasonBox: {
+    backgroundColor: "#ffffff",
+    padding: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 6,
+  },
+  handoverReasonText: {
+    fontSize: 11,
+    fontStyle: "italic",
+    color: "#475569",
+  },
+  handoverNotesText: {
+    fontSize: 11,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  handoverCollectorText: {
+    fontSize: 10,
+    color: "#94a3b8",
+  },
 });
+

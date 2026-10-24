@@ -219,4 +219,16 @@ export const getSocietyHouseholds = async () => {
   return res.data;
 };
 
+// Task 4: Society QR Resolution and Handovers
+export const resolveSocietyQr = async (qrCode) => {
+  const res = await api.post('/bmc-collections/resolve-society-qr', { qrCode });
+  return res.data;
+};
+
+export const getSocietyHandovers = async () => {
+  const res = await api.get('/societies/my/handovers');
+  return res.data;
+};
+
 export default api;
+

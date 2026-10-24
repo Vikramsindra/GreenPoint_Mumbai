@@ -1,3 +1,4 @@
+// filepath: api/src/models/BulkCollection.js
 const mongoose = require('mongoose');
 
 const bulkCollectionSchema = new mongoose.Schema({
@@ -11,15 +12,49 @@ const bulkCollectionSchema = new mongoose.Schema({
     ref: 'CollectionPoint',
     default: null
   },
+  societyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Society',
+    default: null
+  },
+  outcome: {
+    type: String,
+    enum: ['SEGREGATED', 'MIXED', 'NO_HANDOVER'],
+    default: 'SEGREGATED'
+  },
   wasteType: {
     type: String,
     enum: ['wet', 'dry', 'mixed', 'bulk'],
-    required: true
+    required: function () {
+      return this.outcome !== 'NO_HANDOVER';
+    },
+    default: null
   },
   weight: {
     type: Number,
-    required: true,
-    min: 0
+    required: function () {
+      return this.outcome !== 'NO_HANDOVER';
+    },
+    min: 0,
+    default: 0
+  },
+  weightBasis: {
+    type: String,
+    enum: ['ESTIMATED', 'MEASURED'],
+    default: 'ESTIMATED'
+  },
+  pointsAwarded: {
+    type: Number,
+    default: 0
+  },
+  pointsReason: {
+    type: String,
+    default: ''
+  },
+  requestId: {
+    type: String,
+    trim: true,
+    default: null
   },
   photoUrl: {
     type: String,
@@ -42,6 +77,20 @@ const bulkCollectionSchema = new mongoose.Schema({
     lng: {
       type: Number,
       default: null
+    }
+  },
+  deviceLocation: {
+    lat: {
+      type: Number,
+      default: null
+    },
+    lng: {
+      type: Number,
+      default: null
+    },
+    isAvailable: {
+      type: Boolean,
+      default: false
     }
   },
   status: {
@@ -70,7 +119,12 @@ const bulkCollectionSchema = new mongoose.Schema({
 
 bulkCollectionSchema.index({ bmcCollectorId: 1, timestamp: -1 });
 bulkCollectionSchema.index({ collectionPointId: 1, timestamp: -1 });
+bulkCollectionSchema.index({ societyId: 1, timestamp: -1 });
 bulkCollectionSchema.index({ wardId: 1, timestamp: -1 });
 bulkCollectionSchema.index({ status: 1 });
+bulkCollectionSchema.index(
+  { requestId: 1 },
+  { unique: true, partialFilterExpression: { requestId: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('BulkCollection', bulkCollectionSchema);
