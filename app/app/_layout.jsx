@@ -42,20 +42,19 @@ export default function RootLayout() {
       } else if (user?.role === "bmc_collector") {
         router.replace("/(bmc-collector)/dashboard");
       } else if (user?.role === "society_representative") {
-        router.replace("/(society-representative)/dashboard");
+        router.replace("/(society-representative)/society");
       } else {
         router.replace("/(tabs)/home");
       }
     } else if (token && !inAuthGroup) {
-      // Keep each operational role inside its own route group. Citizen-only
-      // shared screens live at the root and are intentionally allowed.
+      // Keep each operational role inside its own route group.
       const currentPage = segments[0];
       if (user?.role === "collector" && currentPage !== "(collector)") {
         router.replace("/(collector)/round");
       } else if (user?.role === "bmc_collector" && currentPage !== "(bmc-collector)") {
         router.replace("/(bmc-collector)/dashboard");
-      } else if (user?.role === "society_representative" && currentPage !== "(society-representative)") {
-        router.replace("/(society-representative)/dashboard");
+      } else if (user?.role === "society_representative" && currentPage !== "(society-representative)" && currentPage !== "society") {
+        router.replace("/(society-representative)/society");
       } else if (user?.role === "citizen" && !["(tabs)", "leaderboard", "profile", "rewards-history"].includes(currentPage)) {
         router.replace("/(tabs)/home");
       }

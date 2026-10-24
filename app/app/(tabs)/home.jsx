@@ -132,7 +132,7 @@ export default function HomeScreen() {
                 <Text style={styles.greeting}>Hi, {user?.name?.split(' ')[0] || 'User'}!</Text>
                 <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 2}}>
                   <Ionicons name="happy-outline" size={14} color="rgba(255,255,255,0.9)" />
-                  <Text style={styles.statusText}> {user?.role === 'citizen' ? 'Active Citizen' : user?.role === 'collector' ? 'Society Collector' : 'Waste Manager'}</Text>
+                  <Text style={styles.statusText}> {user?.role === 'citizen' ? 'Active Citizen' : user?.role === 'collector' ? 'Society Collector' : user?.role === 'officer' ? `Ward Officer (${user?.wardId || 'N-WARD'})` : 'Waste Manager'}</Text>
                 </View>
               </View>
             </View>
@@ -152,6 +152,21 @@ export default function HomeScreen() {
             <Ionicons name="search" size={20} color="#9ca3af" />
           </View>
         </LinearGradient>
+
+        {user?.role === 'officer' && (
+          <View style={{ marginHorizontal: SPACING.lg, marginTop: 16, padding: 16, backgroundColor: '#EFF6FF', borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Text style={{ fontSize: 18 }}>🏛️</Text>
+              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#1E40AF' }}>Officer Review Portal</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: '#1E3A8A', lineHeight: 18 }}>
+              You are logged in as a Ward Officer ({user?.wardId || 'N-WARD'}). Society applications, officer approvals, and QR issuance are managed on the Officer Web Dashboard:
+            </Text>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#2563EB', marginTop: 4 }}>
+              🌐 http://localhost:5173/societies
+            </Text>
+          </View>
+        )}
 
         {/* Metrics Section */}
         <View style={styles.section}>

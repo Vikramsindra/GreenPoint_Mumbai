@@ -9,7 +9,7 @@ export default function SocietyRepresentativeLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="society" />
     </Stack>
   );
 }

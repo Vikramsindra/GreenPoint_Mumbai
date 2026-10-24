@@ -70,6 +70,18 @@ export default function SideMenu() {
                 <Text style={styles.menuText}>Reward History</Text>
               </TouchableOpacity>
 
+              {user?.role === 'officer' && (
+                <View style={{ marginVertical: 8, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE' }}>
+                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#1E40AF', marginBottom: 2 }}>🏛️ Ward Officer Portal</Text>
+                  <Text style={{ fontSize: 11, color: '#1E3A8A' }}>
+                    Societies & approvals are on the Web Dashboard:
+                  </Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2563EB', marginTop: 2 }}>
+                    http://localhost:5173/societies
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.divider} />
 
               <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); logout(); }}>
