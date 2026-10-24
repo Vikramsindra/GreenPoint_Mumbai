@@ -107,6 +107,10 @@ const bulkCollectionSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  verifiedAt: {
+    type: Date,
+    default: null
+  },
   timestamp: {
     type: Date,
     default: Date.now

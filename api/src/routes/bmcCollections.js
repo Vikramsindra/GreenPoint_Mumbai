@@ -10,7 +10,7 @@ const CollectionPoint = require('../models/CollectionPoint');
 const Society = require('../models/Society');
 const SocietyPointEvent = require('../models/SocietyPointEvent');
 const User = require('../models/User');
-const { getIstBusinessDate } = require('../utils/dateHelper');
+const { getIstBusinessDate, getIstDayRange } = require('../utils/dateHelper');
 
 // -------------------------------------------------------------
 // Validation Schemas
@@ -528,4 +528,149 @@ router.get('/history', auth, requireRole('bmc_collector'), async (req, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// GET /api/bmc-collections/officer/list
+// Ward-scoped collections list for Ward Officer
+// -------------------------------------------------------------
+router.get('/officer/list', auth, requireRole('officer'), async (req, res) => {
+  try {
+    const officerWard = req.user.wardId;
+    const { date, outcome, wasteType, status, page = 1, limit = 20 } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+
+    // Strictly enforce officer's ward
+    const query = { wardId: officerWard };
+
+    if (date === 'today' || !date) {
+      const todayRange = getIstDayRange();
+      query.timestamp = { $gte: todayRange.start, $lte: todayRange.end };
+    } else if (date !== 'all') {
+      const range = getIstDayRange(date);
+      query.timestamp = { $gte: range.start, $lte: range.end };
+    }
+
+    if (outcome && ['SEGREGATED', 'MIXED', 'NO_HANDOVER'].includes(outcome)) {
+      query.outcome = outcome;
+    }
+
+    if (wasteType && ['wet', 'dry', 'mixed', 'bulk'].includes(wasteType)) {
+      query.wasteType = wasteType;
+    }
+
+    if (status && ['pending', 'verified', 'rejected'].includes(status)) {
+      query.status = status;
+    }
+
+    const [collections, totalCount] = await Promise.all([
+      BulkCollection.find(query)
+        .populate('societyId', 'name pointsBalance address')
+        .populate('collectionPointId', 'name type address')
+        .populate('bmcCollectorId', 'name phone')
+        .populate('verifiedBy', 'name')
+        .sort({ timestamp: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      BulkCollection.countDocuments(query)
+    ]);
+
+    // Compute operational summary metrics for the scoped query
+    const allMatching = await BulkCollection.find(query).select('outcome weight societyId status');
+    const validHandovers = allMatching.filter(c => c.outcome !== 'NO_HANDOVER');
+    const totalWeight = validHandovers.reduce((sum, c) => sum + (c.weight || 0), 0);
+    const successfulHandovers = validHandovers.length;
+    const distinctSocieties = new Set(
+      validHandovers.map(c => c.societyId ? c.societyId.toString() : null).filter(Boolean)
+    ).size;
+    const pendingReviewCount = allMatching.filter(c => c.status === 'pending').length;
+
+    res.json({
+      success: true,
+      data: {
+        collections,
+        totalCount,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalCount / limitNum),
+        summary: {
+          totalWeight: Math.round(totalWeight * 100) / 100,
+          successfulHandovers,
+          distinctSocietiesCovered: distinctSocieties,
+          pendingReviewCount,
+          totalRecords: allMatching.length
+        }
+      },
+      message: 'Officer collections retrieved successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch officer collections: ' + error.message });
+  }
+});
+
+const reviewPickupSchema = Joi.object({
+  status: Joi.string().valid('verified', 'rejected').required(),
+  notes: Joi.when('status', {
+    is: 'rejected',
+    then: Joi.string().trim().min(3).required().messages({
+      'any.required': 'An explanatory note is required when rejecting a pickup (at least 3 characters)',
+      'string.empty': 'An explanatory note is required when rejecting a pickup (at least 3 characters)'
+    }),
+    otherwise: Joi.string().allow('', null).optional()
+  })
+});
+
+// -------------------------------------------------------------
+// PATCH /api/bmc-collections/:id/review
+// Review a pending pickup in officer's ward
+// Note: Review records an operational decision. It does NOT adjust previously awarded points in this demo.
+// -------------------------------------------------------------
+router.patch('/:id/review', auth, requireRole('officer'), validate(reviewPickupSchema), async (req, res) => {
+  try {
+    const { status, notes } = req.body;
+    const officerWard = req.user.wardId;
+
+    const collection = await BulkCollection.findById(req.params.id)
+      .populate('societyId', 'name pointsBalance')
+      .populate('bmcCollectorId', 'name phone');
+
+    if (!collection) {
+      return res.status(404).json({ success: false, message: 'Pickup record not found' });
+    }
+
+    // Ward boundary verification
+    if (collection.wardId !== officerWard) {
+      return res.status(403).json({
+        success: false,
+        message: `Pickup belongs to Ward ${collection.wardId}. You are only authorized to review Ward ${officerWard} pickups.`
+      });
+    }
+
+    // Prevent second review from silently overwriting completed decision
+    if (collection.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Pickup has already been reviewed (current status: ${collection.status}).`
+      });
+    }
+
+    // Record review decision without altering points, weight, outcome, or society wallet
+    collection.status = status;
+    collection.verifiedBy = req.user.id;
+    collection.verificationNotes = (notes || '').trim();
+    collection.verifiedAt = new Date();
+
+    await collection.save();
+
+    res.json({
+      success: true,
+      data: collection,
+      message: `Pickup successfully marked as ${status}. Review records an operational decision. It does not adjust previously awarded points in this demo.`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to review pickup: ' + error.message });
+  }
+});
+
 module.exports = router;
+

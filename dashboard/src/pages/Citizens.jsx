@@ -45,6 +45,14 @@ export default function Citizens() {
         </div>
       </div>
 
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+        <span className="text-xl">ℹ️</span>
+        <div className="text-xs text-blue-800">
+          <p className="font-bold">Pilot Policy Notice:</p>
+          <p>Individual citizen points are preserved historical balances. Current segregation rewards belong to the Housing Society wallet and are redeemed collectively for society improvements.</p>
+        </div>
+      </div>
+
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-wrap gap-4 items-center justify-between">
         <div className="flex items-center gap-3 flex-1 min-w-[300px] max-w-md">
           <form onSubmit={handleSearchSubmit} className="relative w-full">
@@ -90,8 +98,8 @@ export default function Citizens() {
                 <th className="px-6 py-4 w-1/4">Name</th>
                 <th className="px-6 py-4 w-1/6">Phone</th>
                 <th className="px-6 py-4 w-1/6">Society</th>
-                <th className="px-6 py-4 w-[12%] text-right">Balance</th>
-                <th className="px-6 py-4 w-[12%] text-center">Vio (30d)</th>
+                <th className="px-6 py-4 w-[14%] text-right">Historical Pts</th>
+                <th className="px-6 py-4 w-[10%] text-center">Vio (30d)</th>
                 <th className="px-6 py-4 w-[15%] text-center">Status</th>
               </tr>
             </thead>

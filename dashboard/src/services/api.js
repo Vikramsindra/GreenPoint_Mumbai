@@ -97,6 +97,24 @@ export const getSocietyVouchers = (params = {}) => {
 export const fulfilSocietyVoucher = (voucherId, notes = '') =>
   api.patch(`/society-rewards/vouchers/${voucherId}/fulfil`, { notes });
 
+// BMC Operations & Officer Pickup Review (Task 7)
+export const getBmcCollectionsOfficer = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.date) query.append('date', params.date);
+  if (params.outcome) query.append('outcome', params.outcome);
+  if (params.wasteType) query.append('wasteType', params.wasteType);
+  if (params.status) query.append('status', params.status);
+  if (params.page) query.append('page', params.page);
+  if (params.limit) query.append('limit', params.limit);
+  return api.get(`/bmc-collections/officer/list?${query.toString()}`);
+};
+
+export const reviewBmcCollection = (id, data) =>
+  api.patch(`/bmc-collections/${id}/review`, data);
+
+// Collector Audit (Task 7)
+export const getCollectorAudit = () => api.get('/dashboard/collector-audit');
+
 export default api;
 
 

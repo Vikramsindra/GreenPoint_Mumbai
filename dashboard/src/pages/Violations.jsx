@@ -80,10 +80,21 @@ export default function Violations() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Violation Management</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Historical Violation & Appeal Audit</h1>
+          <p className="text-xs text-gray-500 mt-1">Preserved audit records for historical pilot and legacy violation reviews</p>
+        </div>
         <button onClick={handleExport} className="btn-secondary flex items-center gap-2">
           <span>⬇️</span> Export CSV
         </button>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+        <span className="text-xl">⚠️</span>
+        <div className="text-xs text-amber-900">
+          <p className="font-bold">Pilot Policy Notice:</p>
+          <p>Automated monetary fines and penalties are disabled during the BMC Society pilot. Household waste segregation issues are recorded as structured observations (Mixed waste / No handover) by internal society collectors without automated fines. Genuine existing violation records and appeals remain accessible for audit.</p>
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-wrap gap-4 items-center justify-between">

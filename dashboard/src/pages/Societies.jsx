@@ -333,10 +333,11 @@ export default function Societies() {
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Society Name</th>
+                  <th className="py-3.5 px-4">Society & Wallet</th>
                   <th className="py-3.5 px-4">Ward & Address</th>
                   <th className="py-3.5 px-4">Representative</th>
                   <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Internal Collector</th>
                   <th className="py-3.5 px-4">BMC Collector</th>
                   <th className="py-3.5 px-4">Submitted At</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -350,9 +351,16 @@ export default function Societies() {
                         <span className="text-lg">🏢</span>
                         <div>
                           <div>{soc.name}</div>
-                          {soc.registrationNumber && (
-                            <span className="text-xs text-gray-400 font-mono">Reg: {soc.registrationNumber}</span>
-                          )}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {soc.registrationNumber && (
+                              <span className="text-xs text-gray-400 font-mono">Reg: {soc.registrationNumber}</span>
+                            )}
+                            {soc.registrationStatus === "APPROVED" && (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                Wallet: {soc.pointsBalance || 0} pts
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -382,6 +390,26 @@ export default function Societies() {
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                           Rejected
                         </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      {soc.registrationStatus === "APPROVED" ? (
+                        soc.internalCollectorId ? (
+                          <div>
+                            <div className="font-semibold text-gray-900 text-xs">
+                              {soc.internalCollectorId.name}
+                            </div>
+                            <div className="text-[11px] text-gray-500 font-mono">
+                              ID: {soc.internalCollectorId.collectorId || soc.internalCollectorId.phone}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600">
+                            Not Designated
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="py-4 px-4">

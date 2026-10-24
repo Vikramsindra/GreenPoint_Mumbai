@@ -758,6 +758,7 @@ router.get('/', auth, requireRole('officer'), async (req, res) => {
     const societies = await Society.find(filter)
       .populate('representativeId', 'name phone email')
       .populate('reviewedBy', 'name')
+      .populate('internalCollectorId', 'name phone collectorId role')
       .populate({
         path: 'collectionPointId',
         select: 'name type address location isActive assignedCollectorId',
@@ -796,6 +797,7 @@ router.get('/:id', auth, async (req, res) => {
     const society = await Society.findById(id)
       .populate('representativeId', 'name phone email')
       .populate('reviewedBy', 'name phone email')
+      .populate('internalCollectorId', 'name phone collectorId role')
       .populate({
         path: 'collectionPointId',
         select: 'name type address wardId location isActive assignedCollectorId',

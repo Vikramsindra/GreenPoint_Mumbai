@@ -356,6 +356,7 @@ router.get('/all', auth, requireRole('officer'), async (req, res) => {
     const [households, totalCount] = await Promise.all([
       Household.find(query)
         .populate('citizenId', 'name phone')
+        .populate('societyRef', 'name address')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),

@@ -163,7 +163,7 @@ export default function Households() {
                   <tr key={hh._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <p className="font-medium text-gray-900 line-clamp-1">{hh.address}</p>
-                      <p className="text-xs text-gray-500">{hh.societyId || 'No Society'}</p>
+                      <p className="text-xs text-gray-500 font-semibold">{hh.societyRef?.name || (hh.societyId ? `Society ID: ${hh.societyId}` : 'No Approved Society')}</p>
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-medium text-gray-900">{hh.citizenId?.name || 'Unknown'}</p>

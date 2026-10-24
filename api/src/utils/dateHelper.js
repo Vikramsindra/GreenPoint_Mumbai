@@ -22,6 +22,42 @@ function getIstBusinessDate(date = new Date()) {
   }
 }
 
+/**
+ * Returns start and end UTC Date objects for a given IST business date (or today).
+ * 00:00:00.000 IST to 23:59:59.999 IST
+ * @param {Date|string} dateOrStr
+ * @returns {{ start: Date, end: Date, dateStr: string }}
+ */
+function getIstDayRange(dateOrStr = new Date()) {
+  const dateStr = typeof dateOrStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateOrStr)
+    ? dateOrStr
+    : getIstBusinessDate(dateOrStr instanceof Date ? dateOrStr : new Date());
+
+  const start = new Date(`${dateStr}T00:00:00.000+05:30`);
+  const end = new Date(`${dateStr}T23:59:59.999+05:30`);
+
+  return { start, end, dateStr };
+}
+
+/**
+ * Returns an array of the last N IST business date strings (ascending: oldest to today).
+ * @param {number} numDays
+ * @returns {string[]}
+ */
+function getPastIstDays(numDays = 7) {
+  const todayRange = getIstDayRange();
+  const days = [];
+  for (let i = numDays - 1; i >= 0; i--) {
+    // Subtract i days from start in ms (i * 24 * 3600 * 1000)
+    const d = new Date(todayRange.start.getTime() - (i * 24 * 60 * 60 * 1000) + (2 * 60 * 60 * 1000)); // safe midday
+    days.push(getIstBusinessDate(d));
+  }
+  return days;
+}
+
 module.exports = {
-  getIstBusinessDate
+  getIstBusinessDate,
+  getIstDayRange,
+  getPastIstDays
 };
+
