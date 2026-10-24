@@ -4,6 +4,8 @@ const router = express.Router();
 const Joi = require('joi');
 const User = require('../models/User');
 const Violation = require('../models/Violation');
+const Society = require('../models/Society');
+const SocietyMembership = require('../models/SocietyMembership');
 const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const penaltyEngine = require('../services/penaltyEngine');
@@ -19,12 +21,50 @@ const logSchema = Joi.object({
   }).optional()
 });
 
+// Internal collector logs an issue against an approved household in their assigned society
 router.post('/log', auth, requireRole('collector'), validate(logSchema), async (req, res) => {
   try {
     const { citizenId, type, location } = req.body;
+
+    const collector = await User.findById(req.user.id);
+    if (!collector || !collector.isActive || !collector.assignedSocietyId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You must be assigned to an approved housing society to log violations.'
+      });
+    }
+
+    const society = await Society.findById(collector.assignedSocietyId);
+    if (!society || society.registrationStatus !== 'APPROVED') {
+      return res.status(403).json({
+        success: false,
+        message: 'Assigned society is inactive or not approved.'
+      });
+    }
+
+    if (!society.internalCollectorId || society.internalCollectorId.toString() !== collector._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not assigned as the designated internal collector for this society.'
+      });
+    }
+
     const citizen = await User.findById(citizenId);
     if (!citizen || citizen.role !== 'citizen') {
       return res.status(404).json({ success: false, message: 'Citizen not found' });
+    }
+
+    // Verify citizen has an APPROVED membership in this collector's assigned society
+    const membership = await SocietyMembership.findOne({
+      citizenId,
+      societyId: society._id,
+      status: 'APPROVED'
+    });
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: 'Violations can only be logged for approved member households in your assigned society.'
+      });
     }
 
     const loc = location || { lat: 19.0728, lng: 72.8826 };
@@ -36,6 +76,7 @@ router.post('/log', auth, requireRole('collector'), validate(logSchema), async (
   }
 });
 
+// Citizen views their own violations
 router.get('/my', auth, requireRole('citizen'), async (req, res) => {
   try {
     const violations = await Violation.find({ citizenId: req.user.id })
@@ -49,50 +90,50 @@ router.get('/my', auth, requireRole('citizen'), async (req, res) => {
   }
 });
 
+// Officer views violations within their administrative ward
 router.get('/all', auth, requireRole('officer'), async (req, res) => {
   try {
     const { status, type, search } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     
-    let filter = {};
+    // Find all citizens belonging strictly to officer's ward
+    const wardCitizens = await User.find({
+      role: 'citizen',
+      wardId: req.user.wardId
+    }).select('_id');
+    const wardCitizenIds = wardCitizens.map(u => u._id);
+
+    let filter = {
+      citizenId: { $in: wardCitizenIds }
+    };
     if (status) filter.status = status;
     if (type) filter.type = type;
     
     if (search) {
-      const users = await User.find({ phone: { $regex: search, $options: 'i' } }).select('_id');
+      const users = await User.find({
+        _id: { $in: wardCitizenIds },
+        phone: { $regex: search, $options: 'i' }
+      }).select('_id');
       const userIds = users.map(u => u._id);
-      if (userIds.length > 0) {
-        filter.citizenId = { $in: userIds };
-      } else {
-        // Force no results if search phone not found
-        filter.citizenId = null;
-      }
+      filter.citizenId = { $in: userIds };
     }
     
-    if (filter.citizenId !== null) {
-      const [violations, totalCount] = await Promise.all([
-        Violation.find(filter)
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .populate('citizenId', 'name phone')
-          .populate('collectorId', 'name'),
-        Violation.countDocuments(filter)
-      ]);
-      
-      return res.json({ 
-        success: true, 
-        data: { violations, totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) }, 
-        message: 'Violations fetched' 
-      });
-    } else {
-      return res.json({ 
-        success: true, 
-        data: { violations: [], totalCount: 0, page, limit, totalPages: 0 }, 
-        message: 'Violations fetched' 
-      });
-    }
+    const [violations, totalCount] = await Promise.all([
+      Violation.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('citizenId', 'name phone wardId')
+        .populate('collectorId', 'name'),
+      Violation.countDocuments(filter)
+    ]);
+    
+    return res.json({ 
+      success: true, 
+      data: { violations, totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) }, 
+      message: 'Violations fetched' 
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Fetch failed: ' + error.message });
   }
@@ -132,17 +173,23 @@ const resolveSchema = Joi.object({
 router.put('/:id/resolve', auth, requireRole('officer'), validate(resolveSchema), async (req, res) => {
   try {
     const { outcome } = req.body;
-    const violation = await Violation.findById(req.params.id);
+    const violation = await Violation.findById(req.params.id).populate('citizenId', 'wardId');
     
     if (!violation) return res.status(404).json({ success: false, message: 'Violation not found' });
+    
+    // Officer ward check
+    if (violation.citizenId?.wardId && violation.citizenId.wardId !== req.user.wardId) {
+      return res.status(403).json({ success: false, message: 'Not authorized: violation is in a different administrative ward' });
+    }
+
     if (violation.status !== 'APPEALED') return res.status(400).json({ success: false, message: 'Only appealed violations can be resolved' });
     
     if (outcome === 'DISMISSED') {
       if (violation.pointsDeducted > 0) {
-        await pointsEngine.reverseDeduction(violation.citizenId, violation.pointsDeducted, violation._id);
+        await pointsEngine.reverseDeduction(violation.citizenId._id || violation.citizenId, violation.pointsDeducted, violation._id);
       }
       violation.fineAmount = 0;
-      await User.findByIdAndUpdate(violation.citizenId, { $inc: { violationCount30d: -1 } });
+      await User.findByIdAndUpdate(violation.citizenId._id || violation.citizenId, { $inc: { violationCount30d: -1 } });
     }
     
     violation.status = 'RESOLVED';

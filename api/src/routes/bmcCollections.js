@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const Joi = require('joi');
 const auth = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleCheck');
 const { validate } = require('../middleware/validate');
 const BulkCollection = require('../models/BulkCollection');
 const CollectionPoint = require('../models/CollectionPoint');
+const Society = require('../models/Society');
 const User = require('../models/User');
 
 // Validation schemas
@@ -21,35 +23,45 @@ const createCollectionSchema = Joi.object({
   }).allow(null)
 });
 
-// Create/log a new collection
-router.post('/', auth, validate(createCollectionSchema), async (req, res) => {
+// Create/log a new collection (BMC collector only)
+router.post('/', auth, requireRole('bmc_collector'), validate(createCollectionSchema), async (req, res) => {
   try {
     const { collectionPointId, wasteType, weight, photoUrl, notes, location, manualPointName } = req.body;
     const bmcCollectorId = req.user.id;
 
-    // Verify user is a BMC collector
     const user = await User.findById(bmcCollectorId);
-    if (!user || user.role !== 'bmc_collector') {
-      return res.status(403).json({ success: false, message: 'Only BMC collectors can log collections' });
+    if (!user || user.role !== 'bmc_collector' || !user.isActive) {
+      return res.status(403).json({ success: false, message: 'Only active BMC collectors can log collections' });
     }
 
-    let pointToLog = collectionPointId;
-
-    // If manual entry, validate manual point name is provided
     if (!collectionPointId || collectionPointId === '') {
+      // Manual operational record
       if (!manualPointName) {
-        return res.status(400).json({ success: false, message: 'Please provide collection point name' });
+        return res.status(400).json({ success: false, message: 'Please provide collection point name for manual entry' });
       }
-      // For manual entries, we'll store the name in notes
     } else {
-      // Verify collection point exists and is assigned to this collector
+      // Verify collection point exists, is active, is explicitly assigned to this BMC collector
       const collectionPoint = await CollectionPoint.findById(collectionPointId);
-      if (!collectionPoint) {
-        return res.status(404).json({ success: false, message: 'Collection point not found' });
+      if (!collectionPoint || !collectionPoint.isActive) {
+        return res.status(404).json({ success: false, message: 'Active collection point not found' });
       }
 
-      if (collectionPoint.assignedCollectorId && collectionPoint.assignedCollectorId.toString() !== bmcCollectorId) {
+      // Reject unassigned points or points assigned to another collector
+      if (!collectionPoint.assignedCollectorId || collectionPoint.assignedCollectorId.toString() !== bmcCollectorId) {
         return res.status(403).json({ success: false, message: 'This collection point is not assigned to you' });
+      }
+
+      // Require matching ward
+      if (collectionPoint.wardId !== user.wardId) {
+        return res.status(403).json({ success: false, message: 'Collection point belongs to a different administrative ward' });
+      }
+
+      // If linked to a Society, require APPROVED society status
+      if (collectionPoint.societyId) {
+        const linkedSociety = await Society.findById(collectionPoint.societyId);
+        if (!linkedSociety || linkedSociety.registrationStatus !== 'APPROVED') {
+          return res.status(403).json({ success: false, message: 'Linked society is not active or approved' });
+        }
       }
     }
 
@@ -61,14 +73,14 @@ router.post('/', auth, validate(createCollectionSchema), async (req, res) => {
       weight,
       photoUrl: photoUrl || null,
       wardId: user.wardId,
-      notes: manualPointName ? `[Manual: ${manualPointName}] ${notes}` : notes,
+      notes: manualPointName ? `[Unverified Manual: ${manualPointName}] ${notes || ''}`.trim() : (notes || ''),
       location: location || null,
       timestamp: new Date()
     });
 
     await bulkCollection.save();
 
-    // Update collection point's lastCollectionAt if it's not a manual entry
+    // Update collection point's lastCollectionAt if not manual entry
     if (collectionPointId && collectionPointId !== '') {
       await CollectionPoint.findByIdAndUpdate(collectionPointId, {
         lastCollectionAt: new Date()
@@ -86,16 +98,10 @@ router.post('/', auth, validate(createCollectionSchema), async (req, res) => {
 });
 
 // Get collections for BMC collector (today/all)
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireRole('bmc_collector'), async (req, res) => {
   try {
     const bmcCollectorId = req.user.id;
     const { filter = 'all' } = req.query; // 'all' or 'today'
-
-    // Verify user is a BMC collector
-    const user = await User.findById(bmcCollectorId);
-    if (!user || user.role !== 'bmc_collector') {
-      return res.status(403).json({ success: false, message: 'Only BMC collectors can view collections' });
-    }
 
     let query = { bmcCollectorId };
 
@@ -121,7 +127,8 @@ router.get('/', auth, async (req, res) => {
 
     const todayStats = {
       totalWeight: todayCollections.reduce((sum, c) => sum + c.weight, 0),
-      pointsCovered: new Set(todayCollections.map(c => c.collectionPointId.toString())).size,
+      // Safe handling of null collectionPointId to prevent crash
+      pointsCovered: new Set(todayCollections.map(c => c.collectionPointId ? c.collectionPointId.toString() : 'manual')).size,
       collectionsLogged: todayCollections.length
     };
 
@@ -139,22 +146,15 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get assigned collection points for BMC collector
-router.get('/points/assigned', auth, async (req, res) => {
+router.get('/points/assigned', auth, requireRole('bmc_collector'), async (req, res) => {
   try {
     const bmcCollectorId = req.user.id;
-
-    // Verify user is a BMC collector
-    const user = await User.findById(bmcCollectorId);
-    if (!user || user.role !== 'bmc_collector') {
-      return res.status(403).json({ success: false, message: 'Only BMC collectors can view assigned points' });
-    }
 
     const collectionPoints = await CollectionPoint.find({
       assignedCollectorId: bmcCollectorId,
       isActive: true
     });
 
-    // Get today's collections for each point
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -183,17 +183,11 @@ router.get('/points/assigned', auth, async (req, res) => {
   }
 });
 
-// Get collection history with filters
-router.get('/history', auth, async (req, res) => {
+// Get collection history with filters (BMC collector only)
+router.get('/history', auth, requireRole('bmc_collector'), async (req, res) => {
   try {
     const bmcCollectorId = req.user.id;
     const { startDate, endDate, wasteType } = req.query;
-
-    // Verify user is a BMC collector
-    const user = await User.findById(bmcCollectorId);
-    if (!user || user.role !== 'bmc_collector') {
-      return res.status(403).json({ success: false, message: 'Only BMC collectors can view history' });
-    }
 
     let query = { bmcCollectorId };
 
@@ -215,7 +209,6 @@ router.get('/history', auth, async (req, res) => {
       .populate('collectionPointId', 'name type address')
       .sort({ timestamp: -1 });
 
-    // Group by date for better UX
     const groupedByDate = {};
     collections.forEach(collection => {
       const date = new Date(collection.timestamp).toDateString();

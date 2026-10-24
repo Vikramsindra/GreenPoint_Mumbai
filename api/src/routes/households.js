@@ -5,6 +5,7 @@ const Joi = require('joi');
 const Household = require('../models/Household');
 const User = require('../models/User');
 const Society = require('../models/Society');
+const SocietyMembership = require('../models/SocietyMembership');
 const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { generateQRCodeString, generateQRCodeImage, generateQRCodeBuffer } = require('../utils/qrGenerator');
@@ -26,9 +27,23 @@ router.post('/register', auth, requireRole('officer'), validate(registerHousehol
       return res.status(404).json({ success: false, message: 'Citizen not found' });
     }
 
+    // Ward match check for citizen
+    if (citizen.wardId && citizen.wardId !== req.user.wardId) {
+      return res.status(400).json({ success: false, message: 'Citizen belongs to a different administrative ward' });
+    }
+
     const existingHousehold = await Household.findOne({ citizenId });
     if (existingHousehold) {
       return res.status(409).json({ success: false, message: 'Citizen already has a registered household' });
+    }
+
+    // Check existing membership/link conflict
+    const existingMembership = await SocietyMembership.findOne({
+      citizenId,
+      status: { $in: ['PENDING', 'APPROVED'] }
+    });
+    if (existingMembership) {
+      return res.status(409).json({ success: false, message: 'Citizen already has an active or pending society membership request' });
     }
 
     let societyRef = null;
@@ -37,6 +52,9 @@ router.post('/register', auth, requireRole('officer'), validate(registerHousehol
       const society = await Society.findById(societyId);
       if (!society || society.registrationStatus !== 'APPROVED') {
         return res.status(400).json({ success: false, message: 'Invalid or non-approved society specified' });
+      }
+      if (society.wardId !== req.user.wardId) {
+        return res.status(400).json({ success: false, message: 'Society belongs to a different administrative ward' });
       }
       societyRef = society._id;
       validatedSocietyId = society._id.toString();
@@ -68,6 +86,74 @@ router.post('/register', auth, requireRole('officer'), validate(registerHousehol
   }
 });
 
+// Helper function to get households for internal collector's assigned society
+async function getCollectorSocietyHouseholds(collectorId) {
+  const collector = await User.findById(collectorId);
+  if (!collector || !collector.isActive || !collector.assignedSocietyId) {
+    return {
+      success: true,
+      data: { households: [], society: null, assigned: false },
+      message: 'No society assigned yet'
+    };
+  }
+
+  const society = await Society.findById(collector.assignedSocietyId);
+  if (!society || society.registrationStatus !== 'APPROVED') {
+    return {
+      success: true,
+      data: { households: [], society: null, assigned: false },
+      message: 'Assigned society is inactive or not found'
+    };
+  }
+
+  // Verify collector is the designated internal collector of this society
+  if (!society.internalCollectorId || society.internalCollectorId.toString() !== collector._id.toString()) {
+    return {
+      success: true,
+      data: { households: [], society: null, assigned: false },
+      message: 'Collector is not assigned as the internal collector for this society'
+    };
+  }
+
+  // Include only active households with APPROVED membership in that society
+  const approvedMemberships = await SocietyMembership.find({
+    societyId: society._id,
+    status: 'APPROVED'
+  }).select('householdId citizenId');
+
+  const approvedHouseholdIds = approvedMemberships.map(m => m.householdId).filter(Boolean);
+  const approvedCitizenIds = approvedMemberships.map(m => m.citizenId);
+
+  const households = await Household.find({
+    isActive: true,
+    $or: [
+      { _id: { $in: approvedHouseholdIds } },
+      { citizenId: { $in: approvedCitizenIds }, societyRef: society._id }
+    ],
+    // Canonical societyRef check: must not point to a conflicting society
+    $and: [
+      { $or: [{ societyRef: null }, { societyRef: { $exists: false } }, { societyRef: society._id }] }
+    ]
+  })
+    .populate('citizenId', 'name phone pointsBalance')
+    .sort({ address: 1 });
+
+  return {
+    success: true,
+    data: {
+      households,
+      society: {
+        id: society._id,
+        name: society.name,
+        wardId: society.wardId,
+        address: society.address
+      },
+      assigned: true
+    },
+    message: 'Society households fetched successfully'
+  };
+}
+
 // Get own household (citizen only)
 router.get('/my', auth, requireRole('citizen'), async (req, res) => {
   try {
@@ -86,62 +172,14 @@ router.get('/my', auth, requireRole('citizen'), async (req, res) => {
 // Get households for collector's assigned society (collector only)
 router.get('/society', auth, requireRole('collector'), async (req, res) => {
   try {
-    const collector = await User.findById(req.user.id);
-    if (!collector || !collector.assignedSocietyId) {
-      return res.json({
-        success: true,
-        data: {
-          households: [],
-          society: null,
-          assigned: false
-        },
-        message: 'No society assigned yet'
-      });
-    }
-
-    const society = await Society.findById(collector.assignedSocietyId);
-    if (!society || society.registrationStatus !== 'APPROVED') {
-      return res.json({
-        success: true,
-        data: {
-          households: [],
-          society: null,
-          assigned: false
-        },
-        message: 'Assigned society is inactive or not found'
-      });
-    }
-
-    const households = await Household.find({
-      isActive: true,
-      $or: [
-        { societyRef: society._id },
-        { societyId: society._id.toString() }
-      ]
-    })
-      .populate('citizenId', 'name phone pointsBalance')
-      .sort({ address: 1 });
-
-    res.json({
-      success: true,
-      data: {
-        households,
-        society: {
-          id: society._id,
-          name: society.name,
-          wardId: society.wardId,
-          address: society.address
-        },
-        assigned: true
-      },
-      message: 'Society households fetched successfully'
-    });
+    const result = await getCollectorSocietyHouseholds(req.user.id);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: 'Fetch failed: ' + err.message });
   }
 });
 
-// Get QR image buffer (officer or the owning citizen)
+// Get QR image buffer (officer in same ward or the owning citizen)
 router.get('/qr-image/:id', auth, requireRole('officer', 'citizen'), async (req, res) => {
   try {
     const household = await Household.findById(req.params.id);
@@ -151,6 +189,10 @@ router.get('/qr-image/:id', auth, requireRole('officer', 'citizen'), async (req,
 
     if (req.user.role === 'citizen' && household.citizenId.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Not authorized to view this QR code' });
+    }
+
+    if (req.user.role === 'officer' && household.wardId !== req.user.wardId) {
+      return res.status(403).json({ success: false, message: 'Not authorized: household is in another ward' });
     }
 
     const buffer = await generateQRCodeBuffer(household.qrCode);
@@ -167,46 +209,11 @@ router.get('/qr-image/:id', auth, requireRole('officer', 'citizen'), async (req,
 router.get('/ward', auth, requireRole('officer', 'collector'), async (req, res) => {
   try {
     if (req.user.role === 'collector') {
-      const collector = await User.findById(req.user.id);
-      if (!collector || !collector.assignedSocietyId) {
-        return res.json({
-          success: true,
-          data: { households: [], society: null, assigned: false },
-          message: 'No society assigned yet'
-        });
-      }
-
-      const society = await Society.findById(collector.assignedSocietyId);
-      if (!society || society.registrationStatus !== 'APPROVED') {
-        return res.json({
-          success: true,
-          data: { households: [], society: null, assigned: false },
-          message: 'Assigned society is inactive'
-        });
-      }
-
-      const households = await Household.find({
-        isActive: true,
-        $or: [
-          { societyRef: society._id },
-          { societyId: society._id.toString() }
-        ]
-      })
-        .populate('citizenId', 'name phone pointsBalance')
-        .sort({ address: 1 });
-
-      return res.json({
-        success: true,
-        data: {
-          households,
-          society: { id: society._id, name: society.name, wardId: society.wardId },
-          assigned: true
-        },
-        message: 'Assigned society households fetched'
-      });
+      const result = await getCollectorSocietyHouseholds(req.user.id);
+      return res.json(result);
     }
 
-    // Officer path: ward-wide view
+    // Officer path: strictly scoped to officer's own ward
     const households = await Household.find({ wardId: req.user.wardId, isActive: true })
       .populate('citizenId', 'name phone pointsBalance')
       .populate('societyRef', 'name')
@@ -218,20 +225,20 @@ router.get('/ward', auth, requireRole('officer', 'collector'), async (req, res) 
   }
 });
 
-// Get all households paginated (officer)
+// Get all households paginated (officer: strictly scoped to officer's ward)
 router.get('/all', auth, requireRole('officer'), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
     const page = parseInt(req.query.page) || 1;
-    const { wardId, search } = req.query;
+    const { search } = req.query;
 
-    const query = {};
-    if (wardId) query.wardId = wardId;
+    // Always enforce officer's ward, ignoring any query parameter
+    const query = { wardId: req.user.wardId };
 
     if (search) {
-      // Need to find citizens matching search first to filter by citizenId
       const matchingCitizens = await User.find({
         role: 'citizen',
+        wardId: req.user.wardId,
         $or: [
           { name: { $regex: search, $options: 'i' } },
           { phone: { $regex: search, $options: 'i' } }
@@ -262,13 +269,21 @@ router.get('/all', auth, requireRole('officer'), async (req, res) => {
   }
 });
 
-// Deactivate household (officer)
+// Deactivate household (officer in same ward)
 router.patch('/:id/deactivate', auth, requireRole('officer'), async (req, res) => {
   try {
-    const household = await Household.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    const household = await Household.findById(req.params.id);
     if (!household) {
       return res.status(404).json({ success: false, message: 'Household not found' });
     }
+
+    if (household.wardId !== req.user.wardId) {
+      return res.status(403).json({ success: false, message: 'Not authorized: household is in a different ward' });
+    }
+
+    household.isActive = false;
+    await household.save();
+
     res.json({ success: true, data: { household }, message: 'Household deactivated' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Deactivation failed: ' + err.message });

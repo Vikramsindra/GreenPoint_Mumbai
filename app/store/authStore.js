@@ -21,6 +21,13 @@ export const useAuthStore = create((set, get) => ({
       }
     } catch (error) {
       await AsyncStorage.removeItem('gp_token');
+      // Clear dependent stores
+      try {
+        const { usePointsStore } = require('./pointsStore');
+        const { useCollectionStore } = require('./collectionStore');
+        usePointsStore.getState().reset?.();
+        useCollectionStore.getState().reset?.();
+      } catch (_) {}
       set({ user: null, token: null, isLoading: false, error: 'Session expired' });
     }
   },
@@ -28,6 +35,14 @@ export const useAuthStore = create((set, get) => ({
   login: async (phone, password) => {
     set({ isLoading: true, error: null });
     try {
+      // Clear previous user cached data before logging in new user
+      try {
+        const { usePointsStore } = require('./pointsStore');
+        const { useCollectionStore } = require('./collectionStore');
+        usePointsStore.getState().reset?.();
+        useCollectionStore.getState().reset?.();
+      } catch (_) {}
+
       const res = await api.login(phone, password);
       await AsyncStorage.setItem('gp_token', res.data.token);
       set({ user: res.data.user, token: res.data.token, isLoading: false });
@@ -41,6 +56,13 @@ export const useAuthStore = create((set, get) => ({
   register: async (data) => {
     set({ isLoading: true, error: null });
     try {
+      try {
+        const { usePointsStore } = require('./pointsStore');
+        const { useCollectionStore } = require('./collectionStore');
+        usePointsStore.getState().reset?.();
+        useCollectionStore.getState().reset?.();
+      } catch (_) {}
+
       const res = await api.register(data);
       await AsyncStorage.setItem('gp_token', res.data.token);
       set({ user: res.data.user, token: res.data.token, isLoading: false });
@@ -53,6 +75,15 @@ export const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     await AsyncStorage.removeItem('gp_token');
+    // Clear dependent stores and UI state
+    try {
+      const { usePointsStore } = require('./pointsStore');
+      const { useCollectionStore } = require('./collectionStore');
+      const { useUiStore } = require('./uiStore');
+      usePointsStore.getState().reset?.();
+      useCollectionStore.getState().reset?.();
+      useUiStore.getState().closeMenu?.();
+    } catch (_) {}
     set({ user: null, token: null, error: null });
   },
 

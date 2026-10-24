@@ -51,5 +51,7 @@ export const usePointsStore = create((set, get) => ({
         createdAt: new Date().toISOString()
     };
     set({ balance: balance + points, history: [mockEvent, ...history] });
-  }
+  },
+
+  reset: () => set({ balance: 0, history: [], isLoading: false })
 }));

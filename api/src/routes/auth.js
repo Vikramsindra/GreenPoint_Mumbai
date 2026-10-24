@@ -74,6 +74,10 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
+    if (user.isActive === false) {
+      return res.status(401).json({ success: false, message: 'Account has been deactivated. Please contact your administrator.' });
+    }
+
     user.lastLoginAt = new Date();
     await user.save();
 

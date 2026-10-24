@@ -7,6 +7,8 @@ const PointEvent = require('../models/PointEvent');
 const User = require('../models/User');
 const Household = require('../models/Household');
 const Violation = require('../models/Violation');
+const Society = require('../models/Society');
+const SocietyMembership = require('../models/SocietyMembership');
 const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const pointsEngine = require('../services/pointsEngine');
@@ -227,20 +229,50 @@ router.post('/collector-scan', auth, requireRole('collector'), validate(collecto
 
     // 2. Collector assignment check: collector must be assigned to an approved society
     const collector = await User.findById(collectorId);
-    if (!collector || !collector.assignedSocietyId) {
+    if (!collector || !collector.isActive || !collector.assignedSocietyId) {
       return res.status(403).json({
         success: false,
         message: 'You have not been assigned to an approved housing society. Cannot scan households.',
       });
     }
 
-    // 3. Society scope check: household must belong to the collector's assigned society
-    const isMatchingSociety = (household.societyRef && household.societyRef.toString() === collector.assignedSocietyId.toString()) ||
-                              (household.societyId && household.societyId === collector.assignedSocietyId.toString());
-    if (!isMatchingSociety) {
+    const society = await Society.findById(collector.assignedSocietyId);
+    if (!society || society.registrationStatus !== 'APPROVED') {
+      return res.status(403).json({
+        success: false,
+        message: 'Assigned society is inactive or not approved.',
+      });
+    }
+
+    if (!society.internalCollectorId || society.internalCollectorId.toString() !== collector._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not assigned as the designated internal collector for this society.',
+      });
+    }
+
+    // 3. Society scope check: canonical societyRef cannot conflict
+    if (household.societyRef && household.societyRef.toString() !== society._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Household does not belong to your assigned housing society.',
+      });
+    }
+
+    // 4. Approved membership check: household must have an APPROVED membership in this society
+    const approvedMembership = await SocietyMembership.findOne({
+      societyId: society._id,
+      status: 'APPROVED',
+      $or: [
+        { householdId: household._id },
+        { citizenId: citizen._id }
+      ]
+    });
+
+    if (!approvedMembership) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Household does not have an approved membership in your assigned housing society.',
       });
     }
 
@@ -327,7 +359,24 @@ router.post('/collector-scan', auth, requireRole('collector'), validate(collecto
 
 router.get('/collector-stats', auth, requireRole('collector', 'officer'), async (req, res) => {
   try {
-    const collectorId = req.user.role === 'officer' && req.query.collectorId ? req.query.collectorId : req.user.id;
+    let collectorId;
+    if (req.user.role === 'collector') {
+      // Collector can inspect only their own statistics
+      collectorId = req.user.id;
+    } else if (req.user.role === 'officer') {
+      // Officer can inspect only a valid internal collector assigned within their ward
+      const queryCollectorId = req.query.collectorId;
+      if (!queryCollectorId) {
+        return res.status(400).json({ success: false, message: 'collectorId query parameter is required for officer audit' });
+      }
+      const collector = await User.findOne({ _id: queryCollectorId, role: 'collector', isActive: true });
+      if (!collector || collector.wardId !== req.user.wardId) {
+        return res.status(403).json({ success: false, message: 'Collector not found or not in your administrative ward' });
+      }
+      collectorId = collector._id.toString();
+    } else {
+      return res.status(403).json({ success: false, message: 'Unauthorized role' });
+    }
     
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);

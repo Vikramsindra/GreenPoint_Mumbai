@@ -1,13 +1,13 @@
-// filepath: dashboard/src/pages/Login.jsx
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 export default function Login() {
+  const location = useLocation();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(location.state?.error || '');
   const [isLoading, setIsLoading] = useState(false);
   
   const login = useAuthStore(state => state.login);

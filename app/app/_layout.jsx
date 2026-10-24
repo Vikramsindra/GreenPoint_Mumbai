@@ -43,6 +43,8 @@ export default function RootLayout() {
         router.replace("/(bmc-collector)/dashboard");
       } else if (user?.role === "society_representative") {
         router.replace("/(society-representative)/society");
+      } else if (user?.role === "officer") {
+        router.replace("/(officer)/portal");
       } else {
         router.replace("/(tabs)/home");
       }
@@ -55,6 +57,8 @@ export default function RootLayout() {
         router.replace("/(bmc-collector)/dashboard");
       } else if (user?.role === "society_representative" && currentPage !== "(society-representative)" && currentPage !== "society") {
         router.replace("/(society-representative)/society");
+      } else if (user?.role === "officer" && currentPage !== "(officer)") {
+        router.replace("/(officer)/portal");
       } else if (user?.role === "citizen" && !["(tabs)", "leaderboard", "profile", "rewards-history"].includes(currentPage)) {
         router.replace("/(tabs)/home");
       }

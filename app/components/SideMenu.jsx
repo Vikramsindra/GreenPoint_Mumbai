@@ -18,11 +18,44 @@ export default function SideMenu() {
 
   const navigateTo = (path) => {
     closeMenu();
-    // setTimeout to allow modal to close smoothly before navigating
     setTimeout(() => {
       router.push(path);
     }, 150);
   };
+
+  const getRoleHomePath = () => {
+    switch (user?.role) {
+      case 'collector':
+        return '/(collector)/round';
+      case 'bmc_collector':
+        return '/(bmc-collector)/dashboard';
+      case 'society_representative':
+        return '/(society-representative)/society';
+      case 'officer':
+        return '/(officer)/portal';
+      case 'citizen':
+      default:
+        return '/(tabs)/home';
+    }
+  };
+
+  const getRoleBadge = () => {
+    switch (user?.role) {
+      case 'collector':
+        return 'Internal Collector';
+      case 'bmc_collector':
+        return 'BMC Collector';
+      case 'society_representative':
+        return 'Society Representative';
+      case 'officer':
+        return `Ward Officer (${user?.wardId || 'N-WARD'})`;
+      case 'citizen':
+      default:
+        return 'Citizen Household';
+    }
+  };
+
+  const configuredDashboardUrl = process.env.EXPO_PUBLIC_DASHBOARD_URL?.trim();
 
   return (
     <Modal visible={isMenuOpen} transparent animationType="fade">
@@ -35,11 +68,13 @@ export default function SideMenu() {
             <View style={styles.header}>
               <View style={styles.userInfo}>
                 <View style={styles.avatar}>
-                  <Text style={{ fontSize: 24 }}>🧑🏽</Text>
+                  <Text style={{ fontSize: 24 }}>
+                    {user?.role === 'officer' ? '🏛️' : user?.role === 'society_representative' ? '🏢' : user?.role === 'bmc_collector' ? '🚛' : user?.role === 'collector' ? '♻️' : '🧑🏽'}
+                  </Text>
                 </View>
-                <View>
-                  <Text style={styles.userName}>{user?.name || 'User'}</Text>
-                  <Text style={styles.userPhone}>{user?.phone || ''}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.userName} numberOfLines={1}>{user?.name || 'User'}</Text>
+                  <Text style={styles.userRoleBadge}>{getRoleBadge()}</Text>
                 </View>
               </View>
               <TouchableOpacity onPress={closeMenu} style={styles.closeBtn}>
@@ -48,43 +83,54 @@ export default function SideMenu() {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/(tabs)/home')}>
+              {/* Home navigation scoped to current role */}
+              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo(getRoleHomePath())}>
                 <Ionicons name="home-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
                 <Text style={styles.menuText}>Home</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/profile')}>
-                <Ionicons name="person-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
-                <Text style={styles.menuText}>Profile</Text>
-              </TouchableOpacity>
-
+              {/* Citizen-only menu destinations */}
               {user?.role === 'citizen' && (
-                <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/leaderboard')}>
-                  <Ionicons name="trophy-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
-                  <Text style={styles.menuText}>Leaderboard</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/profile')}>
+                    <Ionicons name="person-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
+                    <Text style={styles.menuText}>My Profile</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/leaderboard')}>
+                    <Ionicons name="trophy-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
+                    <Text style={styles.menuText}>Leaderboard</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/rewards-history')}>
+                    <Ionicons name="gift-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
+                    <Text style={styles.menuText}>Reward History</Text>
+                  </TouchableOpacity>
+                </>
               )}
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/rewards-history')}>
-                <Ionicons name="gift-outline" size={22} color={COLORS.text} style={styles.menuIcon} />
-                <Text style={styles.menuText}>Reward History</Text>
-              </TouchableOpacity>
-
+              {/* Officer-specific guidance */}
               {user?.role === 'officer' && (
-                <View style={{ marginVertical: 8, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE' }}>
-                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#1E40AF', marginBottom: 2 }}>🏛️ Ward Officer Portal</Text>
-                  <Text style={{ fontSize: 11, color: '#1E3A8A' }}>
-                    Societies & approvals are on the Web Dashboard:
+                <View style={styles.officerGuidanceBox}>
+                  <Text style={styles.officerGuidanceTitle}>🏛️ Web Dashboard</Text>
+                  <Text style={styles.officerGuidanceText}>
+                    Society verification and municipal oversight are conducted via the GreenPoint Web Dashboard on BMC computers.
                   </Text>
-                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2563EB', marginTop: 2 }}>
-                    http://localhost:5173/societies
-                  </Text>
+                  {configuredDashboardUrl && (
+                    <Text style={styles.officerGuidanceUrl}>{configuredDashboardUrl}</Text>
+                  )}
                 </View>
               )}
 
               <View style={styles.divider} />
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); logout(); }}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  closeMenu();
+                  logout();
+                }}
+              >
                 <Ionicons name="log-out-outline" size={22} color={COLORS.danger} style={styles.menuIcon} />
                 <Text style={[styles.menuText, { color: COLORS.danger }]}>Log Out</Text>
               </TouchableOpacity>
@@ -127,23 +173,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   userName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: COLORS.text,
   },
-  userPhone: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
+  userRoleBadge: {
+    fontSize: 11,
+    color: COLORS.primaryDark,
+    fontWeight: '600',
     marginTop: 2,
   },
   closeBtn: {
@@ -155,7 +203,7 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 8,
   },
@@ -165,14 +213,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   menuText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
     color: COLORS.text,
+  },
+  officerGuidanceBox: {
+    marginVertical: 10,
+    padding: 12,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  officerGuidanceTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#1E40AF',
+    marginBottom: 4,
+  },
+  officerGuidanceText: {
+    fontSize: 11,
+    color: '#1E3A8A',
+    lineHeight: 16,
+  },
+  officerGuidanceUrl: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#2563EB',
+    marginTop: 6,
   },
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginVertical: 12,
+    marginVertical: 10,
     marginHorizontal: 12,
   }
 });

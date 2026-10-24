@@ -16,4 +16,8 @@ export const useCollectionStore = create((set) => ({
   clearTrigger: () => {
     set({ lastCollectionTime: null });
   },
+
+  reset: () => {
+    set({ lastCollectionTime: null, collectionCount: 0 });
+  }
 }));

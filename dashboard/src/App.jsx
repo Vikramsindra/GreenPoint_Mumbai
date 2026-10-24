@@ -19,25 +19,33 @@ import BMCOperations from "./pages/BMCOperations";
 import { useAuthStore } from "./store/authStore";
 
 const ProtectedRoute = ({ children }) => {
-  const { token, user } = useAuthStore();
+  const { token, user, logout } = useAuthStore();
   if (!token) return <Navigate to="/login" replace />;
-  // Officer check could also go here if needed
+
   if (user && user.role !== "officer") {
-    alert("Access Denied. Only officers can view this dashboard.");
-    return <Navigate to="/login" replace />;
+    logout();
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ error: "Access Denied. Only BMC Ward Officers can access this dashboard." }}
+      />
+    );
   }
+
   return children;
 };
 
 export default function App() {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
+  const isOfficer = !!(token && user?.role === "officer");
 
   return (
     <Router>
       <Routes>
         <Route
           path="/login"
-          element={token ? <Navigate to="/" replace /> : <Login />}
+          element={isOfficer ? <Navigate to="/" replace /> : <Login />}
         />
 
         <Route
