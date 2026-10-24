@@ -17,6 +17,8 @@ export default function RoundScreen() {
   
   const [households, setHouseholds] = useState([]);
   const [stats, setStats] = useState({ scansToday: 0, violationsToday: 0 });
+  const [assignedSociety, setAssignedSociety] = useState(null);
+  const [isAssigned, setIsAssigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +122,7 @@ export default function RoundScreen() {
           </View>
           <Text style={styles.headerDate}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</Text>
           <Text style={styles.headerName}>Collector: {user?.name}</Text>
+          <Text style={styles.headerSocietyName}>{assignedSociety ? `🏢 Society: ${assignedSociety.name}` : '⚠️ No Society Assigned'}</Text>
         </View>
 
         {/* Stats Row */}
@@ -325,4 +328,45 @@ const styles = StyleSheet.create({
   modalConfirmDisabled: { opacity: 0.5 },
   modalCancelText: { fontSize: 16, fontWeight: '600', color: '#4b5563' },
   modalConfirmText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+
+  headerSocietyName: {
+    color: '#BBF7D0',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  unassignedCard: {
+    backgroundColor: '#FFFBEB',
+    margin: 16,
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    alignItems: 'center',
+  },
+  unassignedTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#92400E',
+    marginBottom: 8,
+  },
+  unassignedBody: {
+    fontSize: 13,
+    color: '#78350F',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  unassignedRefreshBtn: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  unassignedRefreshBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
 });

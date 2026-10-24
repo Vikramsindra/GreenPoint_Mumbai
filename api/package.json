@@ -9,6 +9,7 @@
     "seed": "node src/seed.js",
     "provision-staff": "node src/scripts/provisionStaff.js",
     "link-legacy-point": "node src/scripts/linkLegacyCollectionPoint.js",
+    "backfill-join-codes": "node src/scripts/backfillSocietyJoinCodes.js",
     "test": "node --test tests/**/*.test.js"
   },
   "dependencies": {

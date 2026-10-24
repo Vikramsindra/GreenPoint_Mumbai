@@ -24,45 +24,11 @@ const scanSchema = Joi.object({
   notes: Joi.string().allow(null, '').optional()
 });
 
-router.post('/scan', auth, validate(scanSchema), async (req, res) => {
-  try {
-    const { qrCode, action, collectorId, isSegregated, amount, notes } = req.body;
-    
-    // Check if the collector explicitly marked it as not segregated
-    if (isSegregated === false) {
-      // We don't award points, but we could log it. For now, just return success.
-      return res.json({
-        success: true,
-        data: { pointsEarned: 0, newBalance: null, action },
-        message: 'Waste not segregated. No points awarded.'
-      });
-    }
-
-    let desc = `Points earned for ${action.toLowerCase().replace('_', ' ')}`;
-    if (action === 'SEGREGATION') desc = 'Daily segregation at pickup';
-    else if (action === 'COMPOSTING') desc = 'Weekly home composting';
-    else if (action === 'RECYCLABLE_DROP') desc = 'Recyclable drop at kiosk';
-
-    const metadata = {
-      collectorId: req.user.id, // The person scanning is the collector
-      amount,
-      notes
-    };
-
-    // The 'qrCode' acts as the Citizen's User ID
-    const result = await pointsEngine.earnPoints(qrCode, action, POINTS_MAP[action], desc, metadata);
-    
-    res.json({
-      success: true,
-      data: { pointsEarned: result.pointsEarned, newBalance: result.newBalance, action },
-      message: `+${result.pointsEarned} GreenPoints awarded to citizen!`
-    });
-  } catch (error) {
-    if (error.code === 'DUPLICATE_SCAN') {
-      return res.status(409).json({ success: false, message: 'Already logged today for this citizen. Come back tomorrow!' });
-    }
-    res.status(500).json({ success: false, message: 'Scan processing failed: ' + error.message });
-  }
+router.post('/scan', auth, (req, res) => {
+  return res.status(403).json({
+    success: false,
+    message: 'Legacy user ID scanning is disabled. Verified household collection requires /api/points/collector-scan with society membership verification.'
+  });
 });
 
 router.get('/balance', auth, async (req, res) => {
@@ -259,7 +225,26 @@ router.post('/collector-scan', auth, requireRole('collector'), validate(collecto
       });
     }
 
-    // 2. Anti-fraud: ward match check
+    // 2. Collector assignment check: collector must be assigned to an approved society
+    const collector = await User.findById(collectorId);
+    if (!collector || !collector.assignedSocietyId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You have not been assigned to an approved housing society. Cannot scan households.',
+      });
+    }
+
+    // 3. Society scope check: household must belong to the collector's assigned society
+    const isMatchingSociety = (household.societyRef && household.societyRef.toString() === collector.assignedSocietyId.toString()) ||
+                              (household.societyId && household.societyId === collector.assignedSocietyId.toString());
+    if (!isMatchingSociety) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Household does not belong to your assigned housing society.',
+      });
+    }
+
+    // 4. Anti-fraud: ward match check
     const wardCheck = checkWardMatch(collectorWardId, household.wardId);
     if (!wardCheck.valid) {
       return res.status(403).json({

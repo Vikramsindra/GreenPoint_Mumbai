@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "../../store/authStore";
@@ -19,6 +20,10 @@ import {
   getMySociety,
   submitSocietyApplication,
   getSocietyQrData,
+  getSocietyMembers,
+  reviewMembershipRequest,
+  lookupCollectorByPhone,
+  assignInternalCollector,
 } from "../../services/api";
 import { COLORS, SPACING, SHADOW } from "../../constants/theme";
 
@@ -58,6 +63,43 @@ export default function SocietyRepresentativeDashboard() {
   const [qrImageUrl, setQrImageUrl] = useState(null);
   const [isLoadingQr, setIsLoadingQr] = useState(false);
 
+  // Task 2: Membership & Collector state
+  const [membersData, setMembersData] = useState({
+    pending: [],
+    approved: [],
+    rejected: [],
+    counts: { pending: 0, approved: 0, total: 0 }
+  });
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [activeTab, setActiveTab] = useState("pending");
+  const [isReviewing, setIsReviewing] = useState(false);
+
+  // Reject modal state
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [rejectionNote, setRejectionNote] = useState("");
+
+  // Collector assignment state
+  const [collectorPhone, setCollectorPhone] = useState("");
+  const [isLookingUpCollector, setIsLookingUpCollector] = useState(false);
+  const [collectorLookupResult, setCollectorLookupResult] = useState(null);
+  const [collectorError, setCollectorError] = useState(null);
+  const [isAssigningCollector, setIsAssigningCollector] = useState(false);
+
+  const loadMembers = useCallback(async () => {
+    setIsLoadingMembers(true);
+    try {
+      const res = await getSocietyMembers();
+      if (res.success && res.data) {
+        setMembersData(res.data);
+      }
+    } catch (err) {
+      console.log("Failed to load members:", err.message);
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  }, []);
+
   // Load existing society application
   const loadSociety = useCallback(async () => {
     setError(null);
@@ -67,6 +109,7 @@ export default function SocietyRepresentativeDashboard() {
         setSociety(res.data);
         if (res.data.registrationStatus === "APPROVED") {
           loadQr(res.data._id);
+          loadMembers();
         }
       } else {
         setSociety(null);
@@ -82,7 +125,7 @@ export default function SocietyRepresentativeDashboard() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [loadMembers]);
 
   const loadQr = async (societyId) => {
     setIsLoadingQr(true);
@@ -95,6 +138,91 @@ export default function SocietyRepresentativeDashboard() {
       console.log("Could not load QR preview:", err.message);
     } finally {
       setIsLoadingQr(false);
+    }
+  };
+
+  const handleApproveRequest = async (membershipId) => {
+    setIsReviewing(true);
+    try {
+      const res = await reviewMembershipRequest(membershipId, { decision: "APPROVED" });
+      if (res.success) {
+        Alert.alert("Request Approved", "Household membership approved and household QR generated.");
+        loadMembers();
+      }
+    } catch (err) {
+      Alert.alert("Approval Error", err.response?.data?.message || err.message || "Failed to approve");
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const handleOpenReject = (reqItem) => {
+    setSelectedRequest(reqItem);
+    setRejectionNote("");
+    setRejectModalVisible(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectionNote.trim() || rejectionNote.trim().length < 3) {
+      Alert.alert("Reason Required", "Please provide a reason for rejection (at least 3 characters).");
+      return;
+    }
+    setIsReviewing(true);
+    try {
+      const res = await reviewMembershipRequest(selectedRequest._id, {
+        decision: "REJECTED",
+        reviewNote: rejectionNote.trim()
+      });
+      if (res.success) {
+        Alert.alert("Request Rejected", "Membership request has been marked as rejected.");
+        setRejectModalVisible(false);
+        setSelectedRequest(null);
+        setRejectionNote("");
+        loadMembers();
+      }
+    } catch (err) {
+      Alert.alert("Rejection Error", err.response?.data?.message || err.message || "Failed to reject");
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const handleLookupCollector = async () => {
+    if (!collectorPhone || collectorPhone.trim().length !== 10) {
+      setCollectorError("Please enter a valid 10-digit registered phone number");
+      return;
+    }
+    setCollectorError(null);
+    setCollectorLookupResult(null);
+    setIsLookingUpCollector(true);
+    try {
+      const res = await lookupCollectorByPhone(collectorPhone.trim());
+      if (res.success && res.data) {
+        setCollectorLookupResult(res.data);
+      }
+    } catch (err) {
+      setCollectorError(err.response?.data?.message || err.message || "Collector not found");
+    } finally {
+      setIsLookingUpCollector(false);
+    }
+  };
+
+  const handleAssignCollector = async () => {
+    if (!collectorLookupResult?.collector?.phone) return;
+    setIsAssigningCollector(true);
+    setCollectorError(null);
+    try {
+      const res = await assignInternalCollector(collectorLookupResult.collector.phone);
+      if (res.success) {
+        Alert.alert("Success", `Collector ${collectorLookupResult.collector.name} has been assigned to your society.`);
+        setCollectorLookupResult(null);
+        setCollectorPhone("");
+        loadSociety();
+      }
+    } catch (err) {
+      setCollectorError(err.response?.data?.message || err.message || "Failed to assign collector");
+    } finally {
+      setIsAssigningCollector(false);
     }
   };
 
@@ -437,7 +565,8 @@ export default function SocietyRepresentativeDashboard() {
 
             {/* APPROVED STATUS CARD & QR CODE */}
             {society.registrationStatus === "APPROVED" && (
-              <View style={[styles.statusCard, styles.approvedCard]}>
+              <>
+                <View style={[styles.statusCard, styles.approvedCard]}>
                 <View style={styles.statusBadgeApproved}>
                   <Text style={styles.statusBadgeTextApproved}>✓ APPROVED & ACTIVE</Text>
                 </View>
@@ -493,10 +622,279 @@ export default function SocietyRepresentativeDashboard() {
                   <Text style={styles.refreshApprovedBtnText}>🔄 Refresh Identity</Text>
                 </TouchableOpacity>
               </View>
-            )}
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 2: SOCIETY JOIN CODE FOR RESIDENTS                  */}
+              {/* -------------------------------------------------------- */}
+              <View style={[styles.card, styles.joinCodeCard]}>
+                <View style={styles.joinCodeHeader}>
+                  <Text style={styles.joinCodeIcon}>🔑</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.joinCodeTitle}>Society Join Code</Text>
+                    <Text style={styles.joinCodeSubtitle}>
+                      Share this unique code with building residents to join your society
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.joinCodeBox}>
+                  <Text style={styles.joinCodeText}>{society.joinCode || "Generating..."}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.copyJoinCodeBtn}
+                  onPress={() => {
+                    Alert.alert(
+                      "Society Join Code",
+                      `Join Code: ${society.joinCode}\n\nShare this code with your residents. Residents enter this code in their GreenPoint mobile app along with their flat number to request household membership.`
+                    );
+                  }}
+                >
+                  <Text style={styles.copyJoinCodeBtnText}>📋 Share / Copy Join Code</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 2: INTERNAL COLLECTOR ASSIGNMENT                    */}
+              {/* -------------------------------------------------------- */}
+              <View style={styles.card}>
+                <Text style={styles.sectionHeaderTitle}>Internal Society Collector</Text>
+                <Text style={styles.sectionHeaderSubtitle}>
+                  Assign an existing registered collector to verify daily household waste segregation.
+                </Text>
+
+                {society.internalCollectorId ? (
+                  <View style={styles.collectorAssignedBox}>
+                    <View style={styles.collectorBadgeRow}>
+                      <Text style={styles.collectorAssignedBadge}>● ASSIGNED & ACTIVE</Text>
+                    </View>
+                    <Text style={styles.collectorNameText}>
+                      👤 {society.internalCollectorId.name || "Assigned Collector"}
+                    </Text>
+                    <Text style={styles.collectorDetailText}>
+                      Phone: {society.internalCollectorId.phone || "N/A"}
+                    </Text>
+                    <Text style={styles.collectorDetailText}>
+                      Staff ID: {society.internalCollectorId.collectorId || "COL-STAFF"}
+                    </Text>
+                    <Text style={styles.collectorNoteText}>
+                      This collector has exclusive access to verify waste segregation for approved member households in {society.name}.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.collectorAssignForm}>
+                    <Text style={styles.assignInstructionText}>
+                      Enter the registered phone number of the collector:
+                    </Text>
+                    <View style={styles.collectorInputRow}>
+                      <TextInput
+                        style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                        placeholder="10-digit phone (e.g. 9876543211)"
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="phone-pad"
+                        maxLength={10}
+                        value={collectorPhone}
+                        onChangeText={(t) => {
+                          setCollectorPhone(t);
+                          setCollectorError(null);
+                          setCollectorLookupResult(null);
+                        }}
+                      />
+                      <TouchableOpacity
+                        style={[styles.lookupBtn, isLookingUpCollector && { opacity: 0.7 }]}
+                        onPress={handleLookupCollector}
+                        disabled={isLookingUpCollector}
+                      >
+                        {isLookingUpCollector ? (
+                          <ActivityIndicator color={COLORS.white} size="small" />
+                        ) : (
+                          <Text style={styles.lookupBtnText}>Lookup</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+
+                    {collectorError ? (
+                      <Text style={styles.collectorErrorText}>⚠️ {collectorError}</Text>
+                    ) : null}
+
+                    {collectorLookupResult && (
+                      <View style={styles.collectorFoundBox}>
+                        <Text style={styles.collectorFoundTitle}>Collector Found</Text>
+                        <Text style={styles.collectorFoundName}>
+                          {collectorLookupResult.collector.name} ({collectorLookupResult.collector.phone})
+                        </Text>
+                        <Text style={styles.collectorFoundId}>
+                          Staff ID: {collectorLookupResult.collector.collectorId || "COL-STAFF"}
+                        </Text>
+                        {collectorLookupResult.alreadyAssigned ? (
+                          <Text style={styles.alreadyAssignedText}>
+                            Already assigned to this society.
+                          </Text>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.confirmAssignBtn, isAssigningCollector && { opacity: 0.7 }]}
+                            onPress={handleAssignCollector}
+                            disabled={isAssigningCollector}
+                          >
+                            {isAssigningCollector ? (
+                              <ActivityIndicator color={COLORS.white} size="small" />
+                            ) : (
+                              <Text style={styles.confirmAssignBtnText}>
+                                Confirm Assignment: {collectorLookupResult.collector.name}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 2: RESIDENT MEMBERSHIP & HOUSEHOLDS                 */}
+              {/* -------------------------------------------------------- */}
+              <View style={styles.card}>
+                <View style={styles.membershipHeaderRow}>
+                  <Text style={styles.sectionHeaderTitle}>Society Households</Text>
+                  <TouchableOpacity onPress={loadMembers} style={styles.refreshIconBtn}>
+                    <Text style={{ fontSize: 16 }}>🔄</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Tabs */}
+                <View style={styles.tabRow}>
+                  <TouchableOpacity
+                    style={[styles.tabBtn, activeTab === "pending" && styles.tabBtnActive]}
+                    onPress={() => setActiveTab("pending")}
+                  >
+                    <Text style={[styles.tabBtnText, activeTab === "pending" && styles.tabBtnTextActive]}>
+                      Pending Requests ({membersData?.counts?.pending || 0})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tabBtn, activeTab === "approved" && styles.tabBtnActive]}
+                    onPress={() => setActiveTab("approved")}
+                  >
+                    <Text style={[styles.tabBtnText, activeTab === "approved" && styles.tabBtnTextActive]}>
+                      Approved Flats ({membersData?.counts?.approved || 0})
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Tab content */}
+                {isLoadingMembers ? (
+                  <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />
+                ) : activeTab === "pending" ? (
+                  <View style={{ marginTop: 12 }}>
+                    {membersData?.pending?.length === 0 ? (
+                      <Text style={styles.emptyListText}>No pending household requests.</Text>
+                    ) : (
+                      membersData.pending.map((reqItem) => (
+                        <View key={reqItem._id} style={styles.requestCard}>
+                          <View style={styles.requestInfoRow}>
+                            <Text style={styles.requestCitizenName}>
+                              {reqItem.citizenId?.name || "Resident"}
+                            </Text>
+                            <Text style={styles.requestCitizenPhone}>
+                              {reqItem.citizenId?.phone}
+                            </Text>
+                          </View>
+                          <Text style={styles.requestAddress}>🏠 {reqItem.address}</Text>
+                          <Text style={styles.requestDate}>
+                            Submitted: {new Date(reqItem.submittedAt).toLocaleDateString()}
+                          </Text>
+
+                          <View style={styles.requestActionRow}>
+                            <TouchableOpacity
+                              style={styles.rejectBtn}
+                              onPress={() => handleOpenReject(reqItem)}
+                              disabled={isReviewing}
+                            >
+                              <Text style={styles.rejectBtnText}>✕ Reject</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.approveBtn}
+                              onPress={() => handleApproveRequest(reqItem._id)}
+                              disabled={isReviewing}
+                            >
+                              <Text style={styles.approveBtnText}>✓ Approve</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                ) : (
+                  <View style={{ marginTop: 12 }}>
+                    {membersData?.approved?.length === 0 ? (
+                      <Text style={styles.emptyListText}>No approved household members yet.</Text>
+                    ) : (
+                      membersData.approved.map((appItem) => (
+                        <View key={appItem._id} style={styles.approvedMemberCard}>
+                          <View style={styles.requestInfoRow}>
+                            <Text style={styles.requestCitizenName}>
+                              {appItem.citizenId?.name || "Resident"}
+                            </Text>
+                            <Text style={styles.householdQrBadge}>
+                              {appItem.householdId?.qrCode || "GP-HH-ACTIVE"}
+                            </Text>
+                          </View>
+                          <Text style={styles.requestAddress}>🏠 {appItem.address}</Text>
+                          <Text style={styles.approvedMetaText}>
+                            Verified member • {appItem.householdId?.totalScans || 0} collections logged
+                          </Text>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+              </View>
+            </>
+          )}
           </View>
         )}
       </ScrollView>
+
+      {/* Rejection Modal */}
+      <Modal visible={rejectModalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalHeaderTitle}>Reject Membership Request</Text>
+            <Text style={styles.modalSubtitle}>
+              Citizen: {selectedRequest?.citizenId?.name} ({selectedRequest?.address})
+            </Text>
+            <Text style={styles.label}>Reason for Rejection *</Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { marginBottom: 16 }]}
+              placeholder="e.g. Flat number does not match society resident records"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={3}
+              value={rejectionNote}
+              onChangeText={setRejectionNote}
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setRejectModalVisible(false)}
+                disabled={isReviewing}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalRejectConfirmBtn}
+                onPress={handleConfirmReject}
+                disabled={isReviewing}
+              >
+                {isReviewing ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                ) : (
+                  <Text style={styles.modalRejectConfirmBtnText}>Confirm Rejection</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -954,6 +1352,366 @@ const styles = StyleSheet.create({
   refreshApprovedBtnText: {
     color: "#15803d",
     fontSize: 13,
+    fontWeight: "700",
+  },
+
+  // Task 2: Join Code Styles
+  joinCodeCard: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+    borderWidth: 1,
+  },
+  joinCodeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 10,
+  },
+  joinCodeIcon: {
+    fontSize: 28,
+  },
+  joinCodeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#166534",
+  },
+  joinCodeSubtitle: {
+    fontSize: 12,
+    color: "#15803d",
+    marginTop: 2,
+  },
+  joinCodeBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    marginBottom: 12,
+  },
+  joinCodeText: {
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: 3,
+    color: "#15803d",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  copyJoinCodeBtn: {
+    backgroundColor: "#16a34a",
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  copyJoinCodeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  // Task 2: Collector Styles
+  sectionHeaderTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: COLORS.text,
+  },
+  sectionHeaderSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    marginBottom: 14,
+  },
+  collectorAssignedBox: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  collectorBadgeRow: {
+    marginBottom: 8,
+  },
+  collectorAssignedBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#DCFCE7",
+    color: "#15803d",
+    fontSize: 11,
+    fontWeight: "800",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  collectorNameText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  collectorDetailText: {
+    fontSize: 13,
+    color: "#4B5563",
+    marginTop: 2,
+  },
+  collectorNoteText: {
+    fontSize: 12,
+    color: "#15803d",
+    fontStyle: "italic",
+    marginTop: 10,
+    lineHeight: 16,
+  },
+  collectorAssignForm: {
+    marginTop: 4,
+  },
+  assignInstructionText: {
+    fontSize: 13,
+    color: "#374151",
+    marginBottom: 8,
+  },
+  collectorInputRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  lookupBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  lookupBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  collectorErrorText: {
+    color: "#DC2626",
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: "500",
+  },
+  collectorFoundBox: {
+    marginTop: 14,
+    backgroundColor: "#F0FDF4",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  collectorFoundTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#166534",
+    textTransform: "uppercase",
+  },
+  collectorFoundName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginTop: 4,
+  },
+  collectorFoundId: {
+    fontSize: 12,
+    color: "#4B5563",
+    marginTop: 2,
+  },
+  alreadyAssignedText: {
+    fontSize: 12,
+    color: "#15803d",
+    fontWeight: "600",
+    marginTop: 6,
+  },
+  confirmAssignBtn: {
+    backgroundColor: "#16a34a",
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  confirmAssignBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  // Task 2: Membership Styles
+  membershipHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  tabRow: {
+    flexDirection: "row",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 10,
+    padding: 3,
+    marginTop: 4,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  tabBtnActive: {
+    backgroundColor: "#FFFFFF",
+    ...SHADOW.small,
+  },
+  tabBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  tabBtnTextActive: {
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  emptyListText: {
+    textAlign: "center",
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginVertical: 16,
+  },
+  requestCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  requestInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  requestCitizenName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#1F2937",
+  },
+  requestCitizenPhone: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  requestAddress: {
+    fontSize: 13,
+    color: "#374151",
+    marginTop: 4,
+  },
+  requestDate: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginTop: 4,
+  },
+  requestActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  rejectBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#EF4444",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+  },
+  rejectBtnText: {
+    color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  approveBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#16a34a",
+    alignItems: "center",
+  },
+  approveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  approvedMemberCard: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  householdQrBadge: {
+    backgroundColor: "#DCFCE7",
+    color: "#15803d",
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  approvedMetaText: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 4,
+  },
+
+  // Modal Styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    ...SHADOW.modal,
+  },
+  modalHeaderTitle: {
+    fontSize: 17,
+    fontWeight: "bold",
+    color: "#DC2626",
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: "#4B5563",
+    marginBottom: 14,
+  },
+  modalBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+  },
+  modalCancelBtnText: {
+    color: "#4B5563",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modalRejectConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+  },
+  modalRejectConfirmBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "700",
   },
 });

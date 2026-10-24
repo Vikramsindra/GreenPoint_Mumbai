@@ -104,7 +104,9 @@ router.get('/me', auth, async (req, res) => {
 const updateSchema = Joi.object({
   name: Joi.string().min(2),
   email: Joi.string().email().allow(''),
-  societyId: Joi.string().allow('')
+  societyId: Joi.forbidden().messages({
+    'any.unknown': 'Society membership cannot be modified via profile update'
+  })
 });
 
 router.put('/me', auth, validate(updateSchema), async (req, res) => {

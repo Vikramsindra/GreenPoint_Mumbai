@@ -22,6 +22,11 @@ const householdSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  societyRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Society',
+    default: null
+  },
   qrCode: {
     type: String,
     unique: true,
@@ -56,5 +61,7 @@ const householdSchema = new mongoose.Schema({
 });
 
 householdSchema.index({ wardId: 1 });
+householdSchema.index({ societyRef: 1 });
+householdSchema.index({ societyId: 1 });
 
 module.exports = mongoose.model('Household', householdSchema);

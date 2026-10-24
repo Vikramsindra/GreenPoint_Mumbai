@@ -4,6 +4,7 @@ const router = express.Router();
 const Joi = require('joi');
 const Household = require('../models/Household');
 const User = require('../models/User');
+const Society = require('../models/Society');
 const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { generateQRCodeString, generateQRCodeImage, generateQRCodeBuffer } = require('../utils/qrGenerator');
@@ -30,6 +31,17 @@ router.post('/register', auth, requireRole('officer'), validate(registerHousehol
       return res.status(409).json({ success: false, message: 'Citizen already has a registered household' });
     }
 
+    let societyRef = null;
+    let validatedSocietyId = '';
+    if (societyId) {
+      const society = await Society.findById(societyId);
+      if (!society || society.registrationStatus !== 'APPROVED') {
+        return res.status(400).json({ success: false, message: 'Invalid or non-approved society specified' });
+      }
+      societyRef = society._id;
+      validatedSocietyId = society._id.toString();
+    }
+
     const qrCode = generateQRCodeString();
     const qrImageUrl = await generateQRCodeImage(qrCode);
 
@@ -37,7 +49,8 @@ router.post('/register', auth, requireRole('officer'), validate(registerHousehol
       citizenId,
       address,
       wardId: req.user.wardId,
-      societyId: societyId || '',
+      societyId: validatedSocietyId,
+      societyRef,
       qrCode,
       qrImageUrl
     });
@@ -58,11 +71,71 @@ router.post('/register', auth, requireRole('officer'), validate(registerHousehol
 // Get own household (citizen only)
 router.get('/my', auth, requireRole('citizen'), async (req, res) => {
   try {
-    const household = await Household.findOne({ citizenId: req.user.id }).populate('citizenId', 'name phone');
+    const household = await Household.findOne({ citizenId: req.user.id })
+      .populate('citizenId', 'name phone')
+      .populate('societyRef', 'name address wardId registrationStatus');
     if (!household) {
-      return res.status(404).json({ success: false, message: 'No household registered yet. Contact your BMC ward office.' });
+      return res.status(404).json({ success: false, message: 'No household registered yet. Join an approved housing society to get your Household QR.' });
     }
     res.json({ success: true, data: { household }, message: 'Household fetched' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Fetch failed: ' + err.message });
+  }
+});
+
+// Get households for collector's assigned society (collector only)
+router.get('/society', auth, requireRole('collector'), async (req, res) => {
+  try {
+    const collector = await User.findById(req.user.id);
+    if (!collector || !collector.assignedSocietyId) {
+      return res.json({
+        success: true,
+        data: {
+          households: [],
+          society: null,
+          assigned: false
+        },
+        message: 'No society assigned yet'
+      });
+    }
+
+    const society = await Society.findById(collector.assignedSocietyId);
+    if (!society || society.registrationStatus !== 'APPROVED') {
+      return res.json({
+        success: true,
+        data: {
+          households: [],
+          society: null,
+          assigned: false
+        },
+        message: 'Assigned society is inactive or not found'
+      });
+    }
+
+    const households = await Household.find({
+      isActive: true,
+      $or: [
+        { societyRef: society._id },
+        { societyId: society._id.toString() }
+      ]
+    })
+      .populate('citizenId', 'name phone pointsBalance')
+      .sort({ address: 1 });
+
+    res.json({
+      success: true,
+      data: {
+        households,
+        society: {
+          id: society._id,
+          name: society.name,
+          wardId: society.wardId,
+          address: society.address
+        },
+        assigned: true
+      },
+      message: 'Society households fetched successfully'
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Fetch failed: ' + err.message });
   }
@@ -90,10 +163,53 @@ router.get('/qr-image/:id', auth, requireRole('officer', 'citizen'), async (req,
 });
 
 // Get households by ward (officer, collector)
+// If caller is collector: strictly scoped to assigned society
 router.get('/ward', auth, requireRole('officer', 'collector'), async (req, res) => {
   try {
+    if (req.user.role === 'collector') {
+      const collector = await User.findById(req.user.id);
+      if (!collector || !collector.assignedSocietyId) {
+        return res.json({
+          success: true,
+          data: { households: [], society: null, assigned: false },
+          message: 'No society assigned yet'
+        });
+      }
+
+      const society = await Society.findById(collector.assignedSocietyId);
+      if (!society || society.registrationStatus !== 'APPROVED') {
+        return res.json({
+          success: true,
+          data: { households: [], society: null, assigned: false },
+          message: 'Assigned society is inactive'
+        });
+      }
+
+      const households = await Household.find({
+        isActive: true,
+        $or: [
+          { societyRef: society._id },
+          { societyId: society._id.toString() }
+        ]
+      })
+        .populate('citizenId', 'name phone pointsBalance')
+        .sort({ address: 1 });
+
+      return res.json({
+        success: true,
+        data: {
+          households,
+          society: { id: society._id, name: society.name, wardId: society.wardId },
+          assigned: true
+        },
+        message: 'Assigned society households fetched'
+      });
+    }
+
+    // Officer path: ward-wide view
     const households = await Household.find({ wardId: req.user.wardId, isActive: true })
       .populate('citizenId', 'name phone pointsBalance')
+      .populate('societyRef', 'name')
       .sort({ address: 1 });
     
     res.json({ success: true, data: { households }, message: 'Ward households fetched' });

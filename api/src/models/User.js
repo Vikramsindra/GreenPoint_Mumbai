@@ -52,6 +52,11 @@ const userSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  assignedSocietyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Society',
+    default: null
+  },
   householdId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Household', 
@@ -81,6 +86,7 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.index({ wardId: 1, role: 1 });
+userSchema.index({ assignedSocietyId: 1 });
 
 userSchema.methods.toSafeObject = function () {
   const obj = this.toObject();

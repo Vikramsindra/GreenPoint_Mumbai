@@ -43,6 +43,17 @@ function generateSocietyQRCodeString() {
   return result;
 }
 
+// Generate a unique, human-friendly Society Join Code for citizen membership requests
+// Format: SOC-XXXXXX (6 uppercase alphanumeric chars, omitting easily confused characters)
+function generateSocietyJoinCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = 'SOC-';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // Generate QR code as raw PNG buffer (for printing/download)
 async function generateQRCodeBuffer(qrCodeString) {
   try {
@@ -61,6 +72,7 @@ async function generateQRCodeBuffer(qrCodeString) {
 module.exports = {
   generateQRCodeString,
   generateSocietyQRCodeString,
+  generateSocietyJoinCode,
   generateQRCodeImage,
   generateQRCodeBuffer
 };

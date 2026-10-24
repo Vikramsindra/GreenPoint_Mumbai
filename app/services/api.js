@@ -183,4 +183,40 @@ export const getSocietyQrData = async (societyId) => {
   return res.data;
 };
 
+// Society Membership & Internal Collector (Task 2)
+export const submitSocietyJoinRequest = async (data) => {
+  const res = await api.post('/societies/join-request', data);
+  return res.data;
+};
+
+export const getMyMembership = async () => {
+  const res = await api.get('/societies/my-membership');
+  return res.data;
+};
+
+export const getSocietyMembers = async () => {
+  const res = await api.get('/societies/my/members');
+  return res.data;
+};
+
+export const reviewMembershipRequest = async (membershipId, data) => {
+  const res = await api.patch(`/societies/members/${membershipId}/review`, data);
+  return res.data;
+};
+
+export const lookupCollectorByPhone = async (phone) => {
+  const res = await api.get(`/societies/collector-lookup?phone=${encodeURIComponent(phone)}`);
+  return res.data;
+};
+
+export const assignInternalCollector = async (phone) => {
+  const res = await api.post('/societies/my/collector', { phone });
+  return res.data;
+};
+
+export const getSocietyHouseholds = async () => {
+  const res = await api.get('/households/society');
+  return res.data;
+};
+
 export default api;

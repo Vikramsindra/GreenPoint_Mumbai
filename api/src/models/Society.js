@@ -79,6 +79,17 @@ const societySchema = new mongoose.Schema({
     trim: true,
     default: '',
     maxlength: 500
+  },
+  joinCode: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: null
+  },
+  internalCollectorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
   }
 }, {
   timestamps: true
@@ -91,6 +102,18 @@ societySchema.index({ representativeId: 1 }, { unique: true });
 societySchema.index(
   { qrCode: 1 },
   { unique: true, partialFilterExpression: { qrCode: { $type: 'string' } } }
+);
+
+// Partial unique index for non-null joinCode values
+societySchema.index(
+  { joinCode: 1 },
+  { unique: true, partialFilterExpression: { joinCode: { $type: 'string' } } }
+);
+
+// Partial unique index for non-null internalCollectorId values (1 collector per society, 1 society per collector)
+societySchema.index(
+  { internalCollectorId: 1 },
+  { unique: true, partialFilterExpression: { internalCollectorId: { $type: 'objectId' } } }
 );
 
 // Query optimization indexes
