@@ -8,15 +8,35 @@ const societyPointEventSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  type: {
+    type: String,
+    enum: ['EARN', 'REDEEM'],
+    default: 'EARN',
+    required: true,
+    index: true
+  },
   collectionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'BulkCollection',
-    required: true
+    required: function() { return this.type === 'EARN'; },
+    default: null
+  },
+  voucherId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SocietyVoucher',
+    required: function() { return this.type === 'REDEEM'; },
+    default: null
   },
   pointsAwarded: {
     type: Number,
     required: true,
-    min: 0
+    min: 0,
+    default: 0
+  },
+  pointsDeducted: {
+    type: Number,
+    min: 0,
+    default: 0
   },
   reason: {
     type: String,
@@ -26,7 +46,14 @@ const societyPointEventSchema = new mongoose.Schema({
   collectorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: function() { return this.type === 'EARN'; },
+    default: null
+  },
+  representativeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function() { return this.type === 'REDEEM'; },
+    default: null
   },
   istBusinessDate: {
     type: String, // 'YYYY-MM-DD' in Asia/Kolkata

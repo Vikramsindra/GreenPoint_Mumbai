@@ -24,6 +24,7 @@ const bmcCollectionsRoutes = require('./routes/bmcCollections');
 const collectionPointsRoutes = require('./routes/collectionPoints');
 const householdRoutes = require('./routes/households');
 const societiesRoutes = require('./routes/societies');
+const societyRewardsRoutes = require('./routes/societyRewards');
 
 // Import cron jobs only in production / dev (disabled in tests)
 if (process.env.NODE_ENV !== 'test') {
@@ -61,6 +62,7 @@ app.use('/api/bmc-collections', bmcCollectionsRoutes);
 app.use('/api/collection-points', collectionPointsRoutes);
 app.use('/api/households', householdRoutes);
 app.use('/api/societies', societiesRoutes);
+app.use('/api/society-rewards', societyRewardsRoutes);
 
 // 404 handler
 app.use((req, res) => {

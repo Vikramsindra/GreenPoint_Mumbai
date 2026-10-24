@@ -9,6 +9,7 @@ export default function Sidebar() {
   const links = [
     { to: "/", label: "Dashboard", icon: "🏠" },
     { to: "/societies", label: "Societies", icon: "🏢" },
+    { to: "/society-vouchers", label: "Society Rewards", icon: "🎟️" },
     { to: "/bmc-operations", label: "BMC Operations", icon: "🚛" },
     { to: "/violations", label: "Violations", icon: "⚠️" },
     { to: "/citizens", label: "Citizens", icon: "👥" },

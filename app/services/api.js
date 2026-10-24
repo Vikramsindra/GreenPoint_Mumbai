@@ -230,5 +230,26 @@ export const getSocietyHandovers = async () => {
   return res.data;
 };
 
+// Task 5: Society Rewards & Vouchers
+export const getSocietyRewardsCatalogue = async () => {
+  const res = await api.get('/society-rewards/catalogue');
+  return res.data;
+};
+
+export const redeemSocietyReward = async (rewardId, requestId) => {
+  const res = await api.post('/society-rewards/redeem', { rewardId, requestId });
+  return res.data;
+};
+
+export const getMySocietyVouchers = async () => {
+  const res = await api.get('/society-rewards/my/vouchers');
+  return res.data;
+};
+
+export const getSocietyTransactions = async () => {
+  const res = await api.get('/society-rewards/my/transactions');
+  return res.data;
+};
+
 export default api;
 

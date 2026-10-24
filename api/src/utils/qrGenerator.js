@@ -54,6 +54,18 @@ function generateSocietyJoinCode() {
   return result;
 }
 
+// Generate a unique, opaque Society Voucher Code
+// Format: GP-VOUCH-XXXXXXXXXXXX (12 random uppercase alphanumeric chars)
+// Does not contain any phone numbers, addresses, JWTs, or credentials.
+function generateSocietyVoucherCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = 'GP-VOUCH-';
+  for (let i = 0; i < 12; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // Generate QR code as raw PNG buffer (for printing/download)
 async function generateQRCodeBuffer(qrCodeString) {
   try {
@@ -73,6 +85,7 @@ module.exports = {
   generateQRCodeString,
   generateSocietyQRCodeString,
   generateSocietyJoinCode,
+  generateSocietyVoucherCode,
   generateQRCodeImage,
   generateQRCodeBuffer
 };

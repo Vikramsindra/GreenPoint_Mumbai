@@ -16,6 +16,7 @@ import Campaigns from "./pages/Campaigns";
 import Households from "./pages/Households";
 import CollectorAudit from "./pages/CollectorAudit";
 import BMCOperations from "./pages/BMCOperations";
+import SocietyVouchers from "./pages/SocietyVouchers";
 import { useAuthStore } from "./store/authStore";
 
 const ProtectedRoute = ({ children }) => {
@@ -57,6 +58,7 @@ export default function App() {
         >
           <Route path="/" element={<WardOverview />} />
           <Route path="/societies" element={<Societies />} />
+          <Route path="/society-vouchers" element={<SocietyVouchers />} />
           <Route path="/bmc-operations" element={<BMCOperations />} />
           <Route path="/violations" element={<Violations />} />
           <Route path="/citizens" element={<Citizens />} />

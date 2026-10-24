@@ -160,39 +160,10 @@ const redeemSchema = Joi.object({
 });
 
 router.post('/redeem', auth, validate(redeemSchema), async (req, res) => {
-  try {
-    const { rewardId, pointsCost } = req.body;
-    const user = await User.findById(req.user.id);
-    
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    if (user.pointsBalance < pointsCost) {
-      return res.status(400).json({ success: false, message: 'Insufficient points balance' });
-    }
-    
-    const voucherCode = uuid.v4().toUpperCase().slice(0, 12);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-    
-    const result = await pointsEngine.deductPoints(req.user.id, pointsCost, 'REDEMPTION', `Redeemed: ${rewardId}`, {
-      voucherCode,
-      rewardId,
-      expiresAt
-    });
-    
-    res.json({
-      success: true,
-      data: {
-        voucherCode,
-        rewardId,
-        pointsSpent: pointsCost,
-        remainingBalance: result.newBalance,
-        expiresAt
-      },
-      message: 'Redemption successful'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Redemption failed: ' + error.message });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Individual citizen reward redemption is temporarily paused during the BMC Society Rewards pilot. Your personal points balance and transaction history remain fully preserved. Please coordinate with your Society Representative for society-level pilot reward redemptions.'
+  });
 });
 
 const collectorScanSchema = Joi.object({

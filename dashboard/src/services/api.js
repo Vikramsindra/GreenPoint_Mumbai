@@ -86,6 +86,18 @@ export const getUsers = (params = {}) => api.get('/dashboard/users', { params })
 export const assignBmcCollector = (pointId, bmcCollectorId) =>
   api.put(`/collection-points/${pointId}/assign`, { bmcCollectorId });
 
+// Society Rewards & Voucher Fulfilment (Task 5)
+export const getSocietyVouchers = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.status) query.append('status', params.status);
+  if (params.search) query.append('search', params.search);
+  return api.get(`/society-rewards/vouchers?${query.toString()}`);
+};
+
+export const fulfilSocietyVoucher = (voucherId, notes = '') =>
+  api.patch(`/society-rewards/vouchers/${voucherId}/fulfil`, { notes });
+
 export default api;
+
 
 

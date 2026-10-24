@@ -13,6 +13,7 @@ import {
   Platform,
   Alert,
   Modal,
+  Clipboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "../../store/authStore";
@@ -25,6 +26,10 @@ import {
   lookupCollectorByPhone,
   assignInternalCollector,
   getSocietyHandovers,
+  getSocietyRewardsCatalogue,
+  redeemSocietyReward,
+  getMySocietyVouchers,
+  getSocietyTransactions,
 } from "../../services/api";
 import { COLORS, SPACING, SHADOW } from "../../constants/theme";
 
@@ -91,6 +96,43 @@ export default function SocietyRepresentativeDashboard() {
   const [handovers, setHandovers] = useState([]);
   const [isLoadingHandovers, setIsLoadingHandovers] = useState(false);
 
+  // Task 5: Society Rewards & Vouchers state
+  const [catalogue, setCatalogue] = useState([]);
+  const [vouchers, setVouchers] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [isLoadingRewards, setIsLoadingRewards] = useState(false);
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [confirmRewardModal, setConfirmRewardModal] = useState({ visible: false, reward: null });
+  const [receiptModal, setReceiptModal] = useState({ visible: false, voucher: null });
+  const [redemptionError, setRedemptionError] = useState(null);
+
+  const loadRewardsAndVouchers = useCallback(async () => {
+    setIsLoadingRewards(true);
+    try {
+      const [catRes, vouchRes, txRes] = await Promise.all([
+        getSocietyRewardsCatalogue().catch(() => null),
+        getMySocietyVouchers().catch(() => null),
+        getSocietyTransactions().catch(() => null)
+      ]);
+      if (catRes?.success && catRes?.data?.catalogue) {
+        setCatalogue(catRes.data.catalogue);
+        if (catRes.data.pointsBalance != null) {
+          setSociety((prev) => (prev ? { ...prev, pointsBalance: catRes.data.pointsBalance } : prev));
+        }
+      }
+      if (vouchRes?.success && vouchRes?.data?.vouchers) {
+        setVouchers(vouchRes.data.vouchers);
+      }
+      if (txRes?.success && txRes?.data?.transactions) {
+        setTransactions(txRes.data.transactions);
+      }
+    } catch (err) {
+      console.log("Failed to load society rewards/vouchers:", err.message);
+    } finally {
+      setIsLoadingRewards(false);
+    }
+  }, []);
+
   const loadHandovers = useCallback(async () => {
     setIsLoadingHandovers(true);
     try {
@@ -133,6 +175,7 @@ export default function SocietyRepresentativeDashboard() {
           loadQr(res.data._id);
           loadMembers();
           loadHandovers();
+          loadRewardsAndVouchers();
         }
       } else {
         setSociety(null);
@@ -148,7 +191,7 @@ export default function SocietyRepresentativeDashboard() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [loadMembers, loadHandovers]);
+  }, [loadMembers, loadHandovers, loadRewardsAndVouchers]);
 
   const loadQr = async (societyId) => {
     setIsLoadingQr(true);
@@ -256,6 +299,41 @@ export default function SocietyRepresentativeDashboard() {
   const handleRefresh = () => {
     setIsRefreshing(true);
     loadSociety();
+    loadRewardsAndVouchers();
+  };
+
+  const handleOpenConfirmRedeem = (reward) => {
+    setRedemptionError(null);
+    setConfirmRewardModal({ visible: true, reward });
+  };
+
+  const handleConfirmRedeemReward = async () => {
+    if (!confirmRewardModal.reward) return;
+    const reward = confirmRewardModal.reward;
+    setIsRedeeming(true);
+    setRedemptionError(null);
+
+    // Unique idempotency request ID
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    try {
+      const res = await redeemSocietyReward(reward.id, requestId);
+      if (res.success && res.data?.voucher) {
+        setConfirmRewardModal({ visible: false, reward: null });
+        setReceiptModal({ visible: true, voucher: res.data.voucher });
+        if (res.data.remainingBalance != null) {
+          setSociety((prev) => (prev ? { ...prev, pointsBalance: res.data.remainingBalance } : prev));
+        }
+        loadRewardsAndVouchers();
+      } else {
+        setRedemptionError(res.message || "Redemption failed");
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || "Redemption failed";
+      setRedemptionError(msg);
+    } finally {
+      setIsRedeeming(false);
+    }
   };
 
   const validateForm = () => {
@@ -324,6 +402,12 @@ export default function SocietyRepresentativeDashboard() {
   };
 
   const handleLogout = async () => {
+    setSociety(null);
+    setCatalogue([]);
+    setVouchers([]);
+    setTransactions([]);
+    setHandovers([]);
+    setMembersData({ pending: [], approved: [], rejected: [], counts: { pending: 0, approved: 0, total: 0 } });
     await logout();
   };
 
@@ -665,6 +749,175 @@ export default function SocietyRepresentativeDashboard() {
                 <Text style={styles.walletSubtitle}>
                   Earned via verified municipal segregated waste handovers (10 pts/day max). Points belong directly to the society.
                 </Text>
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 5: PILOT REWARD CATALOGUE                           */}
+              {/* -------------------------------------------------------- */}
+              <View style={[styles.card, styles.catalogueCard]}>
+                <View style={styles.catalogueHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionHeaderTitle}>Pilot Rewards Catalogue</Text>
+                    <Text style={styles.sectionHeaderSubtitle}>
+                      Demonstration pilot rewards redeemable using society GreenPoints
+                    </Text>
+                  </View>
+                  <View style={styles.demoBadge}>
+                    <Text style={styles.demoBadgeText}>PILOT DEMO</Text>
+                  </View>
+                </View>
+
+                {isLoadingRewards && catalogue.length === 0 ? (
+                  <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 16 }} />
+                ) : (
+                  <View style={styles.rewardCardsList}>
+                    {catalogue.map((reward) => {
+                      const canAfford = (society.pointsBalance || 0) >= reward.pointsCost;
+                      return (
+                        <View key={reward.id} style={styles.rewardItemBox}>
+                          <View style={styles.rewardItemTop}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.rewardItemName}>{reward.name}</Text>
+                              <Text style={styles.rewardItemDesc}>{reward.description}</Text>
+                            </View>
+                            <View style={styles.rewardPointsPill}>
+                              <Text style={styles.rewardPointsPillText}>{reward.pointsCost} PTS</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.rewardDisclaimerBox}>
+                            <Text style={styles.rewardDisclaimerText}>
+                              ℹ️ {reward.pilotDisclaimer}
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            style={[styles.redeemBtn, !canAfford && styles.redeemBtnDisabled]}
+                            onPress={() => handleOpenConfirmRedeem(reward)}
+                            disabled={!canAfford}
+                          >
+                            <Text style={[styles.redeemBtnText, !canAfford && styles.redeemBtnTextDisabled]}>
+                              {canAfford
+                                ? `Redeem for ${reward.pointsCost} Points`
+                                : `Need ${reward.pointsCost} pts (Balance: ${society.pointsBalance || 0})`}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              {/* -------------------------------------------------------- */}
+              {/* TASK 5: SOCIETY VOUCHERS & FULFILMENT RECEIPTS           */}
+              {/* -------------------------------------------------------- */}
+              <View style={[styles.card, styles.vouchersCard]}>
+                <View style={styles.handoversHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionHeaderTitle}>Society Vouchers & Receipts</Text>
+                    <Text style={styles.sectionHeaderSubtitle}>
+                      Vouchers issued to your society and Ward Officer fulfilment records
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={loadRewardsAndVouchers} style={styles.handoversRefreshBtn}>
+                    <Text style={styles.handoversRefreshBtnText}>
+                      {isLoadingRewards ? "..." : "🔄 Refresh"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {isLoadingRewards && vouchers.length === 0 ? (
+                  <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 16 }} />
+                ) : vouchers.length === 0 ? (
+                  <View style={styles.emptyVouchersBox}>
+                    <Text style={{ fontSize: 32, marginBottom: 6 }}>🎟️</Text>
+                    <Text style={styles.emptyHandoversTitle}>No Society Vouchers Yet</Text>
+                    <Text style={styles.emptyHandoversDesc}>
+                      Redeem an eligible pilot reward above to generate a demonstration voucher for your Ward Officer.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.vouchersList}>
+                    {vouchers.map((v) => {
+                      const isIssued = v.effectiveStatus === "ISSUED";
+                      const isFulfilled = v.effectiveStatus === "FULFILLED";
+                      const isExpired = v.effectiveStatus === "EXPIRED";
+
+                      return (
+                        <View key={v.id || v._id} style={styles.voucherCard}>
+                          <View style={styles.voucherTopRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.voucherRewardName}>{v.rewardName}</Text>
+                              <Text style={styles.voucherCostText}>{v.pointsCost} society points spent</Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.voucherStatusBadge,
+                                isIssued && styles.badgeIssued,
+                                isFulfilled && styles.badgeFulfilled,
+                                isExpired && styles.badgeExpired,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.voucherStatusText,
+                                  isIssued && styles.textIssued,
+                                  isFulfilled && styles.textFulfilled,
+                                  isExpired && styles.textExpired,
+                                ]}
+                              >
+                                {isFulfilled ? "✓ FULFILLED" : isExpired ? "● EXPIRED" : "● ISSUED (ACTIVE)"}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Voucher Code Pill */}
+                          <TouchableOpacity
+                            style={styles.voucherCodeBox}
+                            onPress={() => setReceiptModal({ visible: true, voucher: v })}
+                          >
+                            <Text style={styles.voucherCodeLabel}>Voucher Code (Tap for Details):</Text>
+                            <Text style={styles.voucherCodeValue}>{v.voucherCode}</Text>
+                          </TouchableOpacity>
+
+                          <View style={styles.voucherDateRow}>
+                            <Text style={styles.voucherDateText}>
+                              Issued: {new Date(v.issuedAt || v.createdAt).toLocaleDateString()}
+                            </Text>
+                            <Text style={styles.voucherDateText}>
+                              Expires: {new Date(v.expiresAt).toLocaleDateString()}
+                            </Text>
+                          </View>
+
+                          {isFulfilled && (
+                            <View style={styles.fulfilledInfoBox}>
+                              <Text style={styles.fulfilledInfoTitle}>
+                                ✓ Fulfilled by Ward Officer
+                              </Text>
+                              <Text style={styles.fulfilledInfoText}>
+                                Officer: {v.fulfilledBy?.name || "Ward Officer"} • {new Date(v.fulfilledAt).toLocaleDateString()}
+                              </Text>
+                              {v.fulfilmentNotes ? (
+                                <Text style={styles.fulfilledNotesText}>
+                                  Note: "{v.fulfilmentNotes}"
+                                </Text>
+                              ) : null}
+                            </View>
+                          )}
+
+                          {isExpired && (
+                            <View style={styles.expiredNoticeBox}>
+                              <Text style={styles.expiredNoticeText}>
+                                ⚠️ This pilot voucher has expired. Expired pilot vouchers are not fulfillable and points are not refunded in this demonstration.
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
               {/* -------------------------------------------------------- */}
@@ -1051,6 +1304,170 @@ export default function SocietyRepresentativeDashboard() {
           </View>
         </View>
       </Modal>
+
+      {/* Confirm Redemption Modal */}
+      {confirmRewardModal.visible && confirmRewardModal.reward && (
+        <Modal visible transparent animationType="fade">
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalHeaderTitle}>Confirm Pilot Redemption</Text>
+              <Text style={styles.modalSubtitle}>
+                Redeem reward for society: {society.name}
+              </Text>
+
+              <View style={styles.confirmRewardDetailsBox}>
+                <Text style={styles.confirmRewardName}>
+                  {confirmRewardModal.reward.name}
+                </Text>
+                <Text style={styles.confirmRewardDesc}>
+                  {confirmRewardModal.reward.description}
+                </Text>
+                <View style={styles.confirmRewardCostRow}>
+                  <Text style={styles.confirmRewardCostLabel}>Points Cost:</Text>
+                  <Text style={styles.confirmRewardCostValue}>
+                    {confirmRewardModal.reward.pointsCost} Points
+                  </Text>
+                </View>
+                <View style={styles.confirmRewardCostRow}>
+                  <Text style={styles.confirmRewardCostLabel}>New Society Balance:</Text>
+                  <Text style={styles.confirmRewardBalanceValue}>
+                    {(society.pointsBalance || 0) - confirmRewardModal.reward.pointsCost} Points
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.confirmDisclaimerBox}>
+                <Text style={styles.confirmDisclaimerText}>
+                  ⚠️ Demonstration Pilot: Vouchers represent demonstration items subject to ward officer confirmation. Possession of a code alone does not authorize fulfilment.
+                </Text>
+              </View>
+
+              {redemptionError && (
+                <View style={styles.modalErrorBox}>
+                  <Text style={styles.modalErrorText}>⚠️ {redemptionError}</Text>
+                </View>
+              )}
+
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setConfirmRewardModal({ visible: false, reward: null })}
+                  disabled={isRedeeming}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalConfirmBtn, isRedeeming && { opacity: 0.7 }]}
+                  onPress={handleConfirmRedeemReward}
+                  disabled={isRedeeming}
+                >
+                  {isRedeeming ? (
+                    <ActivityIndicator color={COLORS.white} size="small" />
+                  ) : (
+                    <Text style={styles.modalConfirmBtnText}>Confirm & Redeem</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Voucher Receipt Modal */}
+      {receiptModal.visible && receiptModal.voucher && (
+        <Modal visible transparent animationType="slide">
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalBox, styles.receiptModalBox]}>
+              <View style={styles.receiptCheckCircle}>
+                <Text style={{ fontSize: 28 }}>🎉</Text>
+              </View>
+              <Text style={styles.receiptHeaderTitle}>
+                {receiptModal.voucher.effectiveStatus === "FULFILLED"
+                  ? "Voucher Fulfilled"
+                  : "Pilot Voucher Issued"}
+              </Text>
+              <Text style={styles.receiptSubtitle}>
+                {receiptModal.voucher.rewardName}
+              </Text>
+
+              {/* Unique Code Display */}
+              <View style={styles.receiptCodeBox}>
+                <Text style={styles.receiptCodeLabel}>VOUCHER CODE</Text>
+                <Text style={styles.receiptCodeValue}>{receiptModal.voucher.voucherCode}</Text>
+                <TouchableOpacity
+                  style={styles.copyReceiptBtn}
+                  onPress={() => {
+                    Clipboard.setString(receiptModal.voucher.voucherCode);
+                    Alert.alert("Copied", "Voucher code copied to clipboard!");
+                  }}
+                >
+                  <Text style={styles.copyReceiptBtnText}>📋 Copy Code</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.receiptMetaCard}>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Society:</Text>
+                  <Text style={styles.receiptMetaVal}>{society.name} ({society.wardId})</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Cost:</Text>
+                  <Text style={styles.receiptMetaVal}>{receiptModal.voucher.pointsCost} Points</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Status:</Text>
+                  <Text
+                    style={[
+                      styles.receiptMetaVal,
+                      receiptModal.voucher.effectiveStatus === "FULFILLED" && { color: "#0F766E", fontWeight: "700" },
+                      receiptModal.voucher.effectiveStatus === "EXPIRED" && { color: "#B91C1C", fontWeight: "700" },
+                      receiptModal.voucher.effectiveStatus === "ISSUED" && { color: "#15803d", fontWeight: "700" },
+                    ]}
+                  >
+                    {receiptModal.voucher.effectiveStatus || receiptModal.voucher.status}
+                  </Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Expires:</Text>
+                  <Text style={styles.receiptMetaVal}>
+                    {new Date(receiptModal.voucher.expiresAt).toLocaleDateString()}
+                  </Text>
+                </View>
+
+                {receiptModal.voucher.effectiveStatus === "FULFILLED" && (
+                  <View style={styles.receiptFulfilledDetails}>
+                    <Text style={styles.receiptFulfilledTitle}>Fulfilment Record:</Text>
+                    <Text style={styles.receiptFulfilledText}>
+                      Officer: {receiptModal.voucher.fulfilledBy?.name || "Ward Officer"}
+                    </Text>
+                    <Text style={styles.receiptFulfilledText}>
+                      Date: {new Date(receiptModal.voucher.fulfilledAt).toLocaleDateString()}
+                    </Text>
+                    {receiptModal.voucher.fulfilmentNotes ? (
+                      <Text style={styles.receiptFulfilledNotes}>
+                        Notes: "{receiptModal.voucher.fulfilmentNotes}"
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.receiptInstructionsBox}>
+                <Text style={styles.receiptInstructionsText}>
+                  Present this code to your Ward {society.wardId} Officer during demonstration review to record one-time fulfilment.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.receiptCloseBtn}
+                onPress={() => setReceiptModal({ visible: false, voucher: null })}
+              >
+                <Text style={styles.receiptCloseBtnText}>Close Receipt</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -2068,6 +2485,449 @@ const styles = StyleSheet.create({
   handoverCollectorText: {
     fontSize: 10,
     color: "#94a3b8",
+  },
+
+  // Task 5 Styles: Catalogue & Vouchers
+  catalogueCard: {
+    borderColor: "#E0F2FE",
+    borderWidth: 1,
+  },
+  catalogueHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  demoBadge: {
+    backgroundColor: "#E0F2FE",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+  },
+  demoBadgeText: {
+    color: "#0369A1",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  rewardCardsList: {
+    gap: 12,
+  },
+  rewardItemBox: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 14,
+  },
+  rewardItemTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 8,
+  },
+  rewardItemName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  rewardItemDesc: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  rewardPointsPill: {
+    backgroundColor: "#0D9488",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  rewardPointsPillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  rewardDisclaimerBox: {
+    backgroundColor: "#F1F5F9",
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  rewardDisclaimerText: {
+    fontSize: 11,
+    color: "#475569",
+    lineHeight: 15,
+  },
+  redeemBtn: {
+    backgroundColor: "#0D9488",
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  redeemBtnDisabled: {
+    backgroundColor: "#E2E8F0",
+  },
+  redeemBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  redeemBtnTextDisabled: {
+    color: "#94A3B8",
+  },
+
+  // Task 5 Vouchers List Styles
+  vouchersCard: {
+    borderColor: "#CCFBF1",
+    borderWidth: 1,
+  },
+  emptyVouchersBox: {
+    padding: 20,
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+  },
+  vouchersList: {
+    gap: 12,
+  },
+  voucherCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 14,
+    ...SHADOW.card,
+  },
+  voucherTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
+  voucherRewardName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  voucherCostText: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  voucherStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  badgeIssued: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  badgeFulfilled: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  badgeExpired: {
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  voucherStatusText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  textIssued: {
+    color: "#059669",
+  },
+  textFulfilled: {
+    color: "#2563EB",
+  },
+  textExpired: {
+    color: "#64748B",
+  },
+  voucherCodeBox: {
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#94A3B8",
+    borderRadius: 8,
+    padding: 10,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  voucherCodeLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+    marginBottom: 2,
+  },
+  voucherCodeValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+    letterSpacing: 1.5,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  voucherDateRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  voucherDateText: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  fulfilledInfoBox: {
+    marginTop: 10,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    borderRadius: 8,
+    padding: 10,
+  },
+  fulfilledInfoTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1E40AF",
+    marginBottom: 2,
+  },
+  fulfilledInfoText: {
+    fontSize: 11,
+    color: "#1E3A8A",
+  },
+  fulfilledNotesText: {
+    fontSize: 11,
+    color: "#3B82F6",
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  expiredNoticeBox: {
+    marginTop: 8,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 8,
+    padding: 8,
+  },
+  expiredNoticeText: {
+    fontSize: 11,
+    color: "#991B1B",
+    lineHeight: 15,
+  },
+
+  // Confirm Modal Styles
+  confirmRewardDetailsBox: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
+  confirmRewardName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  confirmRewardDesc: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  confirmRewardCostRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  confirmRewardCostLabel: {
+    fontSize: 13,
+    color: "#475569",
+    fontWeight: "500",
+  },
+  confirmRewardCostValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0D9488",
+  },
+  confirmRewardBalanceValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  confirmDisclaimerBox: {
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+  },
+  confirmDisclaimerText: {
+    fontSize: 11,
+    color: "#92400E",
+    lineHeight: 16,
+  },
+  modalErrorBox: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  modalErrorText: {
+    fontSize: 12,
+    color: "#B91C1C",
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: "#0D9488",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalConfirmBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  // Receipt Modal Styles
+  receiptModalBox: {
+    alignItems: "center",
+  },
+  receiptCheckCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  receiptHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  receiptSubtitle: {
+    fontSize: 13,
+    color: "#64748B",
+    marginTop: 2,
+    marginBottom: 14,
+    textAlign: "center",
+  },
+  receiptCodeBox: {
+    width: "100%",
+    backgroundColor: "#0F172A",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  receiptCodeLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94A3B8",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  receiptCodeValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#38BDF8",
+    letterSpacing: 2,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  copyReceiptBtn: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 6,
+  },
+  copyReceiptBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  receiptMetaCard: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  receiptMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  receiptMetaLabel: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  receiptMetaVal: {
+    fontSize: 12,
+    color: "#0F172A",
+    fontWeight: "600",
+  },
+  receiptFulfilledDetails: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  receiptFulfilledTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0F766E",
+    marginBottom: 2,
+  },
+  receiptFulfilledText: {
+    fontSize: 11,
+    color: "#334155",
+  },
+  receiptFulfilledNotes: {
+    fontSize: 11,
+    fontStyle: "italic",
+    color: "#64748B",
+    marginTop: 2,
+  },
+  receiptInstructionsBox: {
+    backgroundColor: "#F0FDFA",
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+    width: "100%",
+  },
+  receiptInstructionsText: {
+    fontSize: 11,
+    color: "#0F766E",
+    lineHeight: 16,
+    textAlign: "center",
+  },
+  receiptCloseBtn: {
+    width: "100%",
+    backgroundColor: "#0D9488",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  receiptCloseBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
 

@@ -74,23 +74,33 @@ export default function RedeemScreen() {
         refreshControl={<RefreshControl refreshing={isLoading || loadingOptions} onRefresh={() => {refresh(); loadOptions();}} />}
       >
         
+        <View style={styles.pilotBanner}>
+          <View style={styles.pilotBannerHeader}>
+            <Ionicons name="information-circle" size={20} color="#0D9488" style={{ marginRight: 6 }} />
+            <Text style={styles.pilotBannerTitle}>BMC Society Rewards Pilot Active</Text>
+          </View>
+          <Text style={styles.pilotBannerText}>
+            Individual citizen redemptions are paused for the society-level pilot demonstration. Your personal balance of {balance} pts is fully preserved. Segregation points now accumulate to your society's collective wallet, redeemable by your Society Representative.
+          </Text>
+        </View>
+
         <View style={styles.balanceHeader}>
-          <Text style={styles.balanceLabel}>Your Balance</Text>
+          <Text style={styles.balanceLabel}>Your Preserved Balance</Text>
           <Text style={styles.balanceAmount}>{balance}</Text>
-          <Text style={styles.balanceLabel}>GreenPoints</Text>
+          <Text style={styles.balanceLabel}>Personal GreenPoints</Text>
           <View style={styles.divider} />
-          <Text style={styles.tipText}>50 pts = ₹10 BEST Credit</Text>
+          <Text style={styles.tipText}>Preserved securely during the Society Rewards Pilot</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionHeading}>Redeem Points</Text>
+          <Text style={styles.sectionHeading}>Browse Rewards (Pilot Paused)</Text>
           <View style={styles.rewardsList}>
             {rewards.map(r => (
               <RewardCard 
                 key={r.id} 
-                reward={r} 
+                reward={{ ...r, disabled: true }} 
                 userBalance={balance} 
-                onRedeem={() => handleRedeemClick(r)} 
+                onRedeem={() => alert('Individual citizen redemption is temporarily paused during the BMC Society Rewards pilot. Your points remain safe!')} 
               />
             ))}
           </View>
@@ -161,6 +171,30 @@ const styles = StyleSheet.create({
   appBarIcon: { padding: 4 },
   logoContainer: { flexDirection: 'row', alignItems: 'center' },
   logoText: { fontSize: 18, fontWeight: '800', color: COLORS.text },
+  pilotBanner: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    borderRadius: 12,
+    padding: 14,
+  },
+  pilotBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  pilotBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  pilotBannerText: {
+    fontSize: 12,
+    color: '#115E59',
+    lineHeight: 18,
+  },
   balanceHeader: { backgroundColor: COLORS.primary, margin: SPACING.lg, borderRadius: 16, padding: 20, alignItems: 'center', ...SHADOW.card },
   balanceLabel: { color: COLORS.white, fontSize: 13, fontWeight: '500' },
   balanceAmount: { color: COLORS.white, fontSize: 36, fontWeight: 'bold', marginVertical: 4 },
