@@ -10,7 +10,10 @@
     "provision-staff": "node src/scripts/provisionStaff.js",
     "link-legacy-point": "node src/scripts/linkLegacyCollectionPoint.js",
     "backfill-join-codes": "node src/scripts/backfillSocietyJoinCodes.js",
-    "test": "node --test tests/**/*.test.js"
+    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
+    "demo:prepare": "node src/scripts/prepareDemoData.js --mode=live",
+    "demo:showcase": "node src/scripts/prepareDemoData.js --mode=showcase",
+    "demo:reset": "node src/scripts/prepareDemoData.js --mode=live --reset-demo-only"
   },
   "dependencies": {
     "axios": "^1.15.2",

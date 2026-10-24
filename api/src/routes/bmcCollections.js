@@ -403,14 +403,16 @@ router.get('/', auth, requireRole('bmc_collector'), async (req, res) => {
       timestamp: { $gte: today }
     });
 
-    // Exclude NO_HANDOVER from weight
-    const validTodayCollections = todayCollections.filter(c => c.outcome !== 'NO_HANDOVER');
+    // Successful handovers must explicitly match SEGREGATED or MIXED
+    const validTodayCollections = todayCollections.filter(c => c.outcome === 'SEGREGATED' || c.outcome === 'MIXED');
 
     const todayStats = {
       totalWeight: validTodayCollections.reduce((sum, c) => sum + (c.weight || 0), 0),
+      // Manual entries without collectionPointId must not count as points covered
       pointsCovered: new Set(
         validTodayCollections
-          .map(c => (c.collectionPointId ? c.collectionPointId.toString() : 'manual'))
+          .map(c => (c.collectionPointId ? c.collectionPointId.toString() : null))
+          .filter(Boolean)
       ).size,
       collectionsLogged: todayCollections.length
     };
@@ -446,12 +448,12 @@ router.get('/points/assigned', auth, requireRole('bmc_collector'), async (req, r
 
     const pointsWithStatus = await Promise.all(
       collectionPoints.map(async (point) => {
-        // Only count actual completed handovers, NO_HANDOVER does NOT mark complete
+        // Only count actual completed handovers matching SEGREGATED or MIXED
         const todayCollection = await BulkCollection.findOne({
           collectionPointId: point._id,
           bmcCollectorId,
           timestamp: { $gte: today },
-          outcome: { $ne: 'NO_HANDOVER' }
+          outcome: { $in: ['SEGREGATED', 'MIXED'] }
         });
 
         return {
@@ -576,10 +578,12 @@ router.get('/officer/list', auth, requireRole('officer'), async (req, res) => {
     ]);
 
     // Compute operational summary metrics for the scoped query
-    const allMatching = await BulkCollection.find(query).select('outcome weight societyId status');
-    const validHandovers = allMatching.filter(c => c.outcome !== 'NO_HANDOVER');
+    const allMatching = await BulkCollection.find(query).select('outcome weight societyId collectionPointId status');
+    // Successful handovers must explicitly match SEGREGATED or MIXED
+    const validHandovers = allMatching.filter(c => c.outcome === 'SEGREGATED' || c.outcome === 'MIXED');
     const totalWeight = validHandovers.reduce((sum, c) => sum + (c.weight || 0), 0);
     const successfulHandovers = validHandovers.length;
+    // Manual entries (missing societyId) must NOT count as distinct societies covered
     const distinctSocieties = new Set(
       validHandovers.map(c => c.societyId ? c.societyId.toString() : null).filter(Boolean)
     ).size;

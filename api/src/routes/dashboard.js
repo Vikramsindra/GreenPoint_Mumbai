@@ -38,10 +38,26 @@ router.get('/ward-stats', auth, requireRole('officer'), async (req, res) => {
     const wardSocietyIds = wardSocieties.map(s => s._id);
 
     // 2. Member households in approved societies in ward
-    const approvedHouseholdsCount = await SocietyMembership.countDocuments({
+    // Exclude inactive households and inactive citizen accounts, using distinct valid household identities
+    const approvedMemberships = await SocietyMembership.find({
       societyId: { $in: wardSocietyIds },
       status: 'APPROVED'
-    });
+    })
+      .populate('householdId', 'isActive')
+      .populate('citizenId', 'isActive');
+
+    const validApprovedHouseholdIds = new Set();
+    for (const m of approvedMemberships) {
+      if (
+        m.householdId &&
+        m.householdId.isActive !== false &&
+        m.citizenId &&
+        m.citizenId.isActive !== false
+      ) {
+        validApprovedHouseholdIds.add(m.householdId._id ? m.householdId._id.toString() : m.householdId.toString());
+      }
+    }
+    const approvedHouseholdsCount = validApprovedHouseholdIds.size;
 
     // 3. Internal Household Inspections Today (from real HouseholdInspection)
     const householdInspectionsToday = await HouseholdInspection.find({
@@ -64,19 +80,30 @@ router.get('/ward-stats', auth, requireRole('officer'), async (req, res) => {
     const municipalPickupsToday = await BulkCollection.find({
       wardId,
       timestamp: { $gte: todayRange.start, $lte: todayRange.end }
-    }).select('outcome weight societyId status');
+    }).select('outcome weight societyId collectionPointId status');
 
     const municipalHandoverRecordsToday = municipalPickupsToday.length;
-    const validMunicipalPickups = municipalPickupsToday.filter(p => p.outcome !== 'NO_HANDOVER');
-    const successfulMunicipalHandoversToday = validMunicipalPickups.length;
+    // Successful municipal handovers MUST explicitly match SEGREGATED or MIXED
+    const successfulMunicipalPickups = municipalPickupsToday.filter(
+      p => p.outcome === 'SEGREGATED' || p.outcome === 'MIXED'
+    );
+    const successfulMunicipalHandoversToday = successfulMunicipalPickups.length;
     const segregatedMunicipalPickupsToday = municipalPickupsToday.filter(p => p.outcome === 'SEGREGATED').length;
     const mixedMunicipalPickupsToday = municipalPickupsToday.filter(p => p.outcome === 'MIXED').length;
     const noHandoverMunicipalAttemptsToday = municipalPickupsToday.filter(p => p.outcome === 'NO_HANDOVER').length;
+    const legacyUnclassifiedMunicipalPickupsToday = municipalPickupsToday.filter(
+      p => !['SEGREGATED', 'MIXED', 'NO_HANDOVER'].includes(p.outcome)
+    ).length;
+
+    // Manual entries (missing societyId) must NOT count as a distinct assigned society covered
     const distinctSocietiesMunicipalToday = new Set(
-      validMunicipalPickups.map(p => p.societyId ? p.societyId.toString() : null).filter(Boolean)
+      successfulMunicipalPickups
+        .map(p => (p.societyId ? p.societyId.toString() : null))
+        .filter(Boolean)
     ).size;
+
     const municipalCollectedWeightToday = Math.round(
-      validMunicipalPickups.reduce((sum, p) => sum + (p.weight || 0), 0) * 100
+      successfulMunicipalPickups.reduce((sum, p) => sum + (p.weight || 0), 0) * 100
     ) / 100;
     const unlinkedMunicipalPickupsToday = municipalPickupsToday.filter(p => !p.societyId).length;
     const pendingReviewPickupsCount = await BulkCollection.countDocuments({ wardId, status: 'pending' });
@@ -138,7 +165,7 @@ router.get('/ward-stats', auth, requireRole('officer'), async (req, res) => {
           BulkCollection.find({
             wardId,
             timestamp: { $gte: range.start, $lte: range.end },
-            outcome: { $ne: 'NO_HANDOVER' }
+            outcome: { $in: ['SEGREGATED', 'MIXED'] }
           }).select('weight')
         ]);
         const dayWeight = dayCollections.reduce((sum, c) => sum + (c.weight || 0), 0);
@@ -229,10 +256,25 @@ router.get('/collector-audit', auth, requireRole('officer'), async (req, res) =>
 
         let assignedHouseholdsCount = 0;
         if (society) {
-          assignedHouseholdsCount = await SocietyMembership.countDocuments({
+          const societyMemberships = await SocietyMembership.find({
             societyId: society._id,
             status: 'APPROVED'
-          });
+          })
+            .populate('householdId', 'isActive')
+            .populate('citizenId', 'isActive');
+
+          const validIds = new Set();
+          for (const m of societyMemberships) {
+            if (
+              m.householdId &&
+              m.householdId.isActive !== false &&
+              m.citizenId &&
+              m.citizenId.isActive !== false
+            ) {
+              validIds.add(m.householdId._id ? m.householdId._id.toString() : m.householdId.toString());
+            }
+          }
+          assignedHouseholdsCount = validIds.size;
         }
 
         // Today's inspections by this collector
@@ -292,11 +334,17 @@ router.get('/collector-audit', auth, requireRole('officer'), async (req, res) =>
           timestamp: { $gte: todayRange.start, $lte: todayRange.end }
         }).sort({ timestamp: -1 });
 
-        const validCollections = collectionsToday.filter(c => c.outcome !== 'NO_HANDOVER');
-        const totalWeightToday = validCollections.reduce((sum, c) => sum + (c.weight || 0), 0);
+        // Successful handovers must explicitly match SEGREGATED or MIXED
+        const successfulCollections = collectionsToday.filter(
+          c => c.outcome === 'SEGREGATED' || c.outcome === 'MIXED'
+        );
+        const totalWeightToday = successfulCollections.reduce((sum, c) => sum + (c.weight || 0), 0);
         const handoversLoggedToday = collectionsToday.length;
+        // Manual entries without collectionPointId must NOT count as distinct assigned points
         const pointsCoveredToday = new Set(
-          validCollections.map(c => c.collectionPointId ? c.collectionPointId.toString() : 'manual')
+          successfulCollections
+            .map(c => (c.collectionPointId ? c.collectionPointId.toString() : null))
+            .filter(Boolean)
         ).size;
         const lastCollectionAt = collectionsToday.length > 0 ? collectionsToday[0].timestamp : null;
 
@@ -312,7 +360,7 @@ router.get('/collector-audit', auth, requireRole('officer'), async (req, res) =>
             societyName: p.societyId?.name || null
           })),
           handoversLoggedToday,
-          successfulHandoversToday: validCollections.length,
+          successfulHandoversToday: successfulCollections.length,
           totalWeightToday: Math.round(totalWeightToday * 100) / 100,
           pointsCoveredToday,
           lastCollectionAt
